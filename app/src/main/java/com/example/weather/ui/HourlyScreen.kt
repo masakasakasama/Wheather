@@ -18,6 +18,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -32,9 +33,6 @@ import androidx.compose.ui.unit.sp
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.weatherIcon
-import java.time.LocalDate
-import java.time.LocalDateTime
-import java.time.ZoneId
 
 @Composable
 fun HourlyScreen(snapshot: WeatherSnapshot?) {
@@ -44,28 +42,21 @@ fun HourlyScreen(snapshot: WeatherSnapshot?) {
             .padding(22.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("時間別天気", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("48時間予報", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         if (snapshot == null) {
             Text("データがありません", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column
         }
 
-        val today = LocalDate.now(ZoneId.of("Asia/Tokyo"))
-        val hours = snapshot.hourly.filter {
-            val date = runCatching { LocalDateTime.parse(it.time).toLocalDate() }.getOrNull()
-            date == today || date == today.plusDays(1)
-        }.take(48)
-
-        Text("黄緑: 気温 / 青: 降水確率。グラフ上に時刻と気温を表示します。", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        val hours = remember(snapshot) { snapshot.hourly.nextHours(48) }
+        Text("現在時刻以降の48時間。時刻はAM/PM表記です。", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
 
         Row(Modifier.horizontalScroll(rememberScrollState())) {
             Column {
                 HourlyGraph(hours)
                 Spacer(Modifier.height(14.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    hours.forEach { hour ->
-                        HourCell(hour)
-                    }
+                    hours.forEach { hour -> HourCell(hour) }
                 }
             }
         }
@@ -86,7 +77,7 @@ private fun HourlyGraph(hours: List<HourlyWeather>) {
     Canvas(Modifier.width((hours.size.coerceAtLeast(1) * 66).dp).height(230.dp)) {
         if (hours.isEmpty()) return@Canvas
         val topPad = 34f
-        val bottomPad = 36f
+        val bottomPad = 38f
         val graphHeight = size.height - topPad - bottomPad
         val columnWidth = size.width / hours.size.coerceAtLeast(1)
         val tempPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -97,7 +88,7 @@ private fun HourlyGraph(hours: List<HourlyWeather>) {
         }
         val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = mutedTextColor
-            textSize = 20f
+            textSize = 18f
             textAlign = Paint.Align.CENTER
         }
         repeat(5) { index ->
@@ -149,7 +140,7 @@ private fun HourCell(hour: HourlyWeather) {
     ) {
         Column(
             Modifier
-                .width(66.dp)
+                .width(72.dp)
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
@@ -157,7 +148,7 @@ private fun HourCell(hour: HourlyWeather) {
             Text(weatherIcon(hour.weatherCode), fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text("${hour.temperatureC?.roundText() ?: "--"}°", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text(hour.precipitationProbability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
-            Text("${hour.precipitationMm?.oneDecimal() ?: "0.0"}mm", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            Text(hour.precipitationMm.mmText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
     }
 }

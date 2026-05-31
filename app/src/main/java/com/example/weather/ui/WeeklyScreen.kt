@@ -28,19 +28,19 @@ fun WeeklyScreen(snapshot: WeatherSnapshot?) {
             .padding(22.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        Text("週間天気", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("2週間予報", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         if (snapshot == null) {
             Text("データがありません", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column
         }
-        Text("カードを押すと詳細を表示します", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("AM / PMの概況を表示します。カードを押すと詳細を表示します。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(snapshot.daily) { day ->
-                WeeklyRow(day = day, onClick = { selectedDay = day })
+            items(snapshot.daily.take(14)) { day ->
+                WeeklyRow(day = day, dayHours = snapshot.hourly.forDate(day.date), onClick = { selectedDay = day })
             }
         }
     }
     selectedDay?.let { day ->
-        DayDetailDialog(day = day, onDismiss = { selectedDay = null })
+        DayDetailDialog(day = day, dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(), onDismiss = { selectedDay = null })
     }
 }

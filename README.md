@@ -36,7 +36,7 @@ gradle assembleDebug
   - `current`: `temperature_2m`, `weather_code`, `precipitation`
   - `hourly`: `temperature_2m`, `precipitation_probability`, `weather_code`, `precipitation`
   - `daily`: `weather_code`, `temperature_2m_max`, `temperature_2m_min`, `precipitation_probability_max`, `precipitation_sum`
-  - `forecast_days=7`
+  - `forecast_days=14`
   - `timezone=Asia/Tokyo`
   - `models=jma_seamless` を優先し、失敗時はmodels指定なしへフォールバック
   - JMA Seamlessで降水確率が欠損する場合は、models指定なしのbest matchから降水確率と降水量を補完
@@ -51,11 +51,11 @@ gradle assembleDebug
 
 ## 画面
 
-- ホーム: 重要気象情報、現在気温、天気、最高/最低、降水確率、降水量、雨予測、今後12時間、週間天気を集約
+- ホーム: 重要気象情報、現在気温、天気、最高/最低、降水確率、降水量、雨予測、今後48時間、2週間天気を集約
 - 地点: 保存地点をリスト表示し、上下並べ替え・削除・世界都市検索・現在地利用が可能
 - 雨雲: 現在地周辺の固定ズーム地図に雨雲タイルを重ねて表示
-- 時間: 今日と明日の1時間ごとの気温・降水確率。グラフ上に時刻と気温ラベルを表示
-- 週間: 7日分のカード。カードを押すと詳細表示
+- 時間: 現在時刻以降48時間の1時間ごとの気温・降水確率・降水量。時刻はAM/PM表記
+- 週間: 14日分のカード。AM/PMの概況と、カード押下時の詳細表示
 
 ## 制限事項
 
