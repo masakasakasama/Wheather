@@ -23,10 +23,12 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          log-accepted-android-sdk-licenses: false
 
       - name: Install Android 16 SDK
         run: |
-          yes | sdkmanager --licenses
+          yes | sdkmanager --licenses > /dev/null
           sdkmanager "platforms;android-36" "build-tools;36.0.0"
 
       - name: Set up Gradle
@@ -39,8 +41,11 @@ jobs:
           set +e
           gradle --no-daemon assembleDebug --stacktrace > build.log 2>&1
           status=$?
-          grep -nE "e: |error:|What went wrong|FAILURE|Unresolved|Type mismatch|Cannot|None of the following" build.log | tail -n 160 || true
-          tail -n 220 build.log
+          if [ "$status" -ne 0 ]; then
+            grep -nE "e: |error:|What went wrong|FAILURE|Unresolved|Type mismatch|Cannot|None of the following|Compilation error" build.log | tail -n 200 || true
+          else
+            tail -n 80 build.log
+          fi
           exit $status
 
       - name: Upload APK
