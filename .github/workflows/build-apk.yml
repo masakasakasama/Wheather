@@ -39,6 +39,7 @@ jobs:
           set +e
           gradle --no-daemon assembleDebug --stacktrace > build.log 2>&1
           status=$?
+          grep -nE "e: |error:|What went wrong|FAILURE|Unresolved|Type mismatch|Cannot|None of the following" build.log | tail -n 160 || true
           tail -n 220 build.log
           exit $status
 
