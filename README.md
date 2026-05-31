@@ -35,10 +35,11 @@ gradle assembleDebug
 - Open-Meteo Forecast API
   - `current`: `temperature_2m`, `weather_code`, `precipitation`
   - `hourly`: `temperature_2m`, `precipitation_probability`, `weather_code`, `precipitation`
-  - `daily`: `weather_code`, `temperature_2m_max`, `temperature_2m_min`, `precipitation_probability_max`
+  - `daily`: `weather_code`, `temperature_2m_max`, `temperature_2m_min`, `precipitation_probability_max`, `precipitation_sum`
   - `forecast_days=7`
   - `timezone=Asia/Tokyo`
   - `models=jma_seamless` を優先し、失敗時はmodels指定なしへフォールバック
+  - JMA Seamlessで降水確率が欠損する場合は、models指定なしのbest matchから降水確率と降水量を補完
 - Open-Meteo Geocoding APIによる世界都市検索
 - GitHub Release `version.json` による起動時アップデート確認
 - DataStore PreferencesによるJSONキャッシュ
@@ -49,7 +50,7 @@ gradle assembleDebug
 
 ## 画面
 
-- ホーム: 現在気温、天気、最高/最低、降水量、雨予測、今後12時間、週間天気を集約
+- ホーム: 現在気温、天気、最高/最低、降水確率、降水量、雨予測、今後12時間、週間天気を集約
 - 地点: 保存地点をリスト表示し、上下並べ替え・削除・世界都市検索・現在地利用が可能
 - 雨雲: 現在地周辺の固定ズーム地図に雨雲タイルを重ねて表示
 - 時間: 今日と明日の1時間ごとの気温・降水確率。グラフ上に時刻と気温ラベルを表示

@@ -92,7 +92,7 @@ private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
             Spacer(GlanceModifier.width(8.dp))
             Text(weatherIcon(snapshot.current.weatherCode), style = widgetText(18))
         }
-        Text("降水 ${snapshot.today()?.maxPrecipitationProbability ?: "--"}%", style = widgetText(12, muted = true))
+        Text("降水 ${snapshot.today()?.maxPrecipitationProbability.percentText()} / ${snapshot.today()?.precipitationSumMm.mmText()}", style = widgetText(12, muted = true))
         Text(nextRainText(snapshot), style = widgetText(11, muted = true), maxLines = 1)
     }
 }
@@ -103,10 +103,10 @@ private fun MediumWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(32, bold = true))
             Spacer(GlanceModifier.width(10.dp))
-            Text("H ${snapshot.today()?.maxTemperatureC?.roundText() ?: "--"}° / L ${snapshot.today()?.minTemperatureC?.roundText() ?: "--"}°", style = widgetText(12, muted = true))
+            Text("H ${snapshot.today()?.maxTemperatureC?.roundText() ?: "--"}° / L ${snapshot.today()?.minTemperatureC?.roundText() ?: "--"}° / ${snapshot.today()?.precipitationSumMm.mmText()}", style = widgetText(12, muted = true))
         }
         Spacer(GlanceModifier.height(6.dp))
-        Text(snapshot.hourly.take(6).joinToString(" ") { "${it.precipitationProbability ?: 0}%" }, style = widgetText(12))
+        Text(snapshot.hourly.take(6).joinToString(" ") { it.precipitationProbability.percentText() }, style = widgetText(12))
         Text(snapshot.hourly.take(6).joinToString(" ") { "${it.temperatureC?.roundText() ?: "--"}°" }, style = widgetText(12, muted = true))
         Text("更新 ${formatHourMinute(snapshot.updatedAtMillis)}", style = widgetText(10, muted = true))
     }
@@ -117,8 +117,16 @@ private fun LargeWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
     Column(modifier) {
         MediumWidget(snapshot, GlanceModifier.fillMaxWidth())
         Spacer(GlanceModifier.height(8.dp))
-        Text(snapshot.daily.take(3).joinToString("  ") { "${it.date.takeLast(5)} ${weatherIcon(it.weatherCode)} ${it.maxTemperatureC?.roundText() ?: "--"}/${it.minTemperatureC?.roundText() ?: "--"}°" }, style = widgetText(12))
-        Text("今日明日 ${snapshot.hourly.take(24).mapNotNull { it.precipitationProbability }.maxOrNull() ?: 0}% / ${snapshot.hourly.drop(24).take(24).mapNotNull { it.precipitationProbability }.maxOrNull() ?: 0}%", style = widgetText(11, muted = true))
+        Text(
+            snapshot.daily.take(3).joinToString("  ") {
+                "${it.date.takeLast(5)} ${weatherIcon(it.weatherCode)} ${it.maxTemperatureC?.roundText() ?: "--"}/${it.minTemperatureC?.roundText() ?: "--"}° ${it.precipitationSumMm.mmText()}"
+            },
+            style = widgetText(12),
+        )
+        Text(
+            "今日明日 ${snapshot.hourly.take(24).mapNotNull { it.precipitationProbability }.maxOrNull().percentText()} / ${snapshot.hourly.drop(24).take(24).mapNotNull { it.precipitationProbability }.maxOrNull().percentText()}",
+            style = widgetText(11, muted = true),
+        )
     }
 }
 
@@ -131,3 +139,6 @@ private fun widgetText(size: Int, bold: Boolean = false, muted: Boolean = false)
 }
 
 private fun Double.roundText(): String = "%.0f".format(this)
+private fun Double.oneDecimal(): String = "%.1f".format(this)
+private fun Double?.mmText(): String = this?.let { "${it.oneDecimal()}mm" } ?: "--mm"
+private fun Int?.percentText(): String = this?.let { "$it%" } ?: "--%"

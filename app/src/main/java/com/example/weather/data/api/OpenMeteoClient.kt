@@ -23,7 +23,15 @@ class OpenMeteoClient(
     suspend fun fetchForecast(location: WeatherLocation): WeatherSnapshot = withContext(Dispatchers.IO) {
         val preferred = request(location, useJmaModel = true)
         if (preferred != null) {
-            preferred.copy(usedFallbackModel = false)
+            val needsProbabilityFallback =
+                preferred.daily.any { it.maxPrecipitationProbability == null } ||
+                    preferred.hourly.any { it.precipitationProbability == null }
+            val withProbabilities = if (needsProbabilityFallback) {
+                request(location, useJmaModel = false)?.let { preferred.withProbabilityFallback(it) } ?: preferred
+            } else {
+                preferred
+            }
+            withProbabilities.copy(usedFallbackModel = false)
         } else {
             request(location, useJmaModel = false)?.copy(usedFallbackModel = true)
                 ?: throw IOException("Open-Meteo forecast request failed")
@@ -58,7 +66,7 @@ class OpenMeteoClient(
             .addQueryParameter("longitude", location.longitude.toString())
             .addQueryParameter("current", "temperature_2m,weather_code,precipitation")
             .addQueryParameter("hourly", "temperature_2m,precipitation_probability,weather_code,precipitation")
-            .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max")
+            .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum")
             .addQueryParameter("forecast_days", "7")
             .addQueryParameter("timezone", "Asia/Tokyo")
         if (useJmaModel) builder.addQueryParameter("models", "jma_seamless")
@@ -96,6 +104,7 @@ class OpenMeteoClient(
                 maxTemperatureC = daily?.maxTemperature?.getOrNull(index),
                 minTemperatureC = daily?.minTemperature?.getOrNull(index),
                 maxPrecipitationProbability = daily?.maxPrecipitationProbability?.getOrNull(index),
+                precipitationSumMm = daily?.precipitationSum?.getOrNull(index),
             )
         }
         return WeatherSnapshot(
@@ -109,6 +118,27 @@ class OpenMeteoClient(
             hourly = hourlyItems,
             daily = dailyItems,
             updatedAtMillis = System.currentTimeMillis(),
+        )
+    }
+
+    private fun WeatherSnapshot.withProbabilityFallback(fallback: WeatherSnapshot): WeatherSnapshot {
+        val fallbackHourly = fallback.hourly.associateBy { it.time }
+        val fallbackDaily = fallback.daily.associateBy { it.date }
+        return copy(
+            hourly = hourly.map { hour ->
+                hour.copy(
+                    precipitationProbability = hour.precipitationProbability
+                        ?: fallbackHourly[hour.time]?.precipitationProbability,
+                )
+            },
+            daily = daily.map { day ->
+                day.copy(
+                    maxPrecipitationProbability = day.maxPrecipitationProbability
+                        ?: fallbackDaily[day.date]?.maxPrecipitationProbability,
+                    precipitationSumMm = day.precipitationSumMm
+                        ?: fallbackDaily[day.date]?.precipitationSumMm,
+                )
+            },
         )
     }
 }

@@ -186,7 +186,8 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 Metric("最高", "${snapshot.today()?.maxTemperatureC?.roundText() ?: "--"}°")
                 Metric("最低", "${snapshot.today()?.minTemperatureC?.roundText() ?: "--"}°")
-                Metric("今日の降水", "${snapshot.today()?.maxPrecipitationProbability ?: "--"}%")
+                Metric("今日の降水", snapshot.today()?.maxPrecipitationProbability.percentText())
+                Metric("雨量", snapshot.today()?.precipitationSumMm.mmText())
             }
         }
     }
@@ -206,6 +207,11 @@ private fun RainSummary(snapshot: WeatherSnapshot) {
                 peak?.let { "24時間以内の最大降水確率 ${it.precipitationProbability ?: "--"}% (${formatHourLabel(it.time)})" }
                     ?: "24時間以内の降水データなし",
                 color = MaterialTheme.colorScheme.secondary,
+                fontSize = 13.sp,
+            )
+            Text(
+                "今日の予想降水量 ${snapshot.today()?.precipitationSumMm.mmText()}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 13.sp,
             )
         }
@@ -319,7 +325,7 @@ private fun HourCompactCard(hour: HourlyWeather) {
             Text(formatHourLabel(hour.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             Text(weatherIcon(hour.weatherCode), fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text("${hour.temperatureC?.roundText() ?: "--"}°", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Text("${hour.precipitationProbability ?: 0}%", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
+            Text(hour.precipitationProbability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
         }
     }
 }
@@ -356,7 +362,10 @@ fun WeeklyRow(day: DailyWeather, onClick: () -> Unit) {
             Text(weatherIcon(day.weatherCode), fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text("${day.maxTemperatureC?.roundText() ?: "--"}°", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text("${day.minTemperatureC?.roundText() ?: "--"}°", fontSize = 19.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text("${day.maxPrecipitationProbability ?: 0}%", color = MaterialTheme.colorScheme.secondary)
+            Column(horizontalAlignment = Alignment.End) {
+                Text(day.maxPrecipitationProbability.percentText(), color = MaterialTheme.colorScheme.secondary)
+                Text(day.precipitationSumMm.mmText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            }
         }
     }
 }
@@ -371,7 +380,8 @@ fun DayDetailDialog(day: DailyWeather, onDismiss: () -> Unit) {
                 Text("${weatherIcon(day.weatherCode)} ${weatherLabel(day.weatherCode)}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 Text("最高気温: ${day.maxTemperatureC?.roundText() ?: "--"}°")
                 Text("最低気温: ${day.minTemperatureC?.roundText() ?: "--"}°")
-                Text("最大降水確率: ${day.maxPrecipitationProbability ?: 0}%")
+                Text("最大降水確率: ${day.maxPrecipitationProbability.percentText()}")
+                Text("予想降水量: ${day.precipitationSumMm.mmText()}")
             }
         },
         confirmButton = {
@@ -557,6 +567,8 @@ fun formatDateLong(date: String): String {
 
 fun Double.roundText(): String = "%.0f".format(this)
 fun Double.oneDecimal(): String = "%.1f".format(this)
+fun Int?.percentText(): String = this?.let { "$it%" } ?: "--%"
+fun Double?.mmText(): String = this?.let { "${it.oneDecimal()}mm" } ?: "--mm"
 
 private fun WeatherLocation.samePlaceAs(other: WeatherLocation): Boolean {
     return "%.4f".format(latitude) == "%.4f".format(other.latitude) &&

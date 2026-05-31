@@ -44,6 +44,7 @@ data class DailyWeather(
     val maxTemperatureC: Double?,
     val minTemperatureC: Double?,
     val maxPrecipitationProbability: Int?,
+    val precipitationSumMm: Double? = null,
 )
 
 @Serializable
@@ -79,6 +80,7 @@ data class OpenMeteoDaily(
     @SerialName("temperature_2m_max") val maxTemperature: List<Double?> = emptyList(),
     @SerialName("temperature_2m_min") val minTemperature: List<Double?> = emptyList(),
     @SerialName("precipitation_probability_max") val maxPrecipitationProbability: List<Int?> = emptyList(),
+    @SerialName("precipitation_sum") val precipitationSum: List<Double?> = emptyList(),
 )
 
 @Serializable
