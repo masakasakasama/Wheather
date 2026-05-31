@@ -1,16 +1,20 @@
 package com.example.weather.ui
 
+import android.graphics.Paint
+import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +28,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
@@ -36,9 +41,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,6 +61,7 @@ import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
 import com.example.weather.data.model.weatherLabel
 import java.time.Instant
+import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -64,6 +74,8 @@ fun HomeScreen(
     onUseDeviceLocation: () -> Unit,
     onSelectLocation: (WeatherLocation) -> Unit,
     onSearchLocations: (String) -> Unit,
+    onMoveLocation: (WeatherLocation, Int) -> Unit,
+    onDeleteLocation: (WeatherLocation) -> Unit,
     onDismissError: () -> Unit,
 ) {
     var showLocationDialog by remember { mutableStateOf(false) }
@@ -75,7 +87,7 @@ fun HomeScreen(
             .fillMaxSize()
             .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(18.dp),
-        contentPadding = androidx.compose.foundation.layout.PaddingValues(top = 18.dp, bottom = 22.dp),
+        contentPadding = PaddingValues(top = 18.dp, bottom = 22.dp),
     ) {
         item {
             Row(
@@ -120,7 +132,11 @@ fun HomeScreen(
             }
             item {
                 Text(
-                    if (snapshot.usedFallbackModel) "JMAモデル取得失敗のためOpen-Meteo best matchを使用中" else "Open-Meteo JMA Seamlessモデル",
+                    if (snapshot.usedFallbackModel) {
+                        "JMA Seamlessが取得できなかったためOpen-Meteo best matchを使用中"
+                    } else {
+                        "Open-Meteo JMA Seamlessモデル"
+                    },
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
@@ -137,6 +153,8 @@ fun HomeScreen(
                 onSelectLocation(it)
                 showLocationDialog = false
             },
+            onMoveLocation = onMoveLocation,
+            onDeleteLocation = onDeleteLocation,
             onUseDeviceLocation = {
                 onUseDeviceLocation()
                 showLocationDialog = false
@@ -185,7 +203,8 @@ private fun RainSummary(snapshot: WeatherSnapshot) {
             Text(nextRainText(snapshot), fontSize = 23.sp, fontWeight = FontWeight.SemiBold)
             val peak = snapshot.hourly.take(24).maxByOrNull { it.precipitationProbability ?: -1 }
             Text(
-                peak?.let { "24時間以内の最大降水確率 ${it.precipitationProbability ?: "--"}% (${formatHourLabel(it.time)})" } ?: "24時間以内の降水データなし",
+                peak?.let { "24時間以内の最大降水確率 ${it.precipitationProbability ?: "--"}% (${formatHourLabel(it.time)})" }
+                    ?: "24時間以内の降水データなし",
                 color = MaterialTheme.colorScheme.secondary,
                 fontSize = 13.sp,
             )
@@ -196,7 +215,7 @@ private fun RainSummary(snapshot: WeatherSnapshot) {
 @Composable
 private fun HomeHourlySection(hours: List<HourlyWeather>) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("今後12時間", "気温線と降水確率")
+        SectionHeader("今後12時間", "時刻ごとの気温と降水確率")
         MiniHourlyGraph(hours)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(hours) { hour ->
@@ -212,43 +231,77 @@ private fun MiniHourlyGraph(hours: List<HourlyWeather>) {
     val minTemp = temps.minOrNull() ?: 0.0
     val maxTemp = temps.maxOrNull() ?: 1.0
     val lineColor = MaterialTheme.colorScheme.primary
+    val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val mutedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)
-    val gridColor = Color(0xFF2A2A2A)
+    val gridColor = Color(0xFF303036)
 
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(150.dp),
+            .height(178.dp),
     ) {
         if (hours.isEmpty()) return@Canvas
+        val topPad = 28f
+        val bottomPad = 34f
+        val graphHeight = size.height - topPad - bottomPad
         val columnWidth = size.width / hours.size.coerceAtLeast(1)
+        val tempPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = textColor
+            textSize = 24f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = mutedTextColor
+            textSize = 20f
+            textAlign = Paint.Align.CENTER
+        }
         repeat(4) { index ->
-            val y = size.height * index / 3f
+            val y = topPad + graphHeight * index / 3f
             drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
         }
         hours.forEachIndexed { index, hour ->
             val probability = (hour.precipitationProbability ?: 0).coerceIn(0, 100)
-            val barHeight = size.height * 0.36f * probability / 100f
+            val barHeight = graphHeight * 0.42f * probability / 100f
             drawRoundRect(
                 color = barColor,
-                topLeft = Offset(index * columnWidth + columnWidth * 0.3f, size.height - barHeight),
-                size = androidx.compose.ui.geometry.Size(columnWidth * 0.4f, barHeight),
-                cornerRadius = androidx.compose.ui.geometry.CornerRadius(8f, 8f),
+                topLeft = Offset(index * columnWidth + columnWidth * 0.3f, topPad + graphHeight - barHeight),
+                size = Size(columnWidth * 0.4f, barHeight),
+                cornerRadius = CornerRadius(8f, 8f),
             )
         }
         val points = hours.mapIndexedNotNull { index, hour ->
             val temp = hour.temperatureC ?: return@mapIndexedNotNull null
             val range = (maxTemp - minTemp).takeIf { it > 0.1 } ?: 1.0
             val x = index * columnWidth + columnWidth / 2f
-            val y = size.height * 0.1f + size.height * 0.46f * (1f - ((temp - minTemp) / range).toFloat())
-            Offset(x, y)
+            val y = topPad + graphHeight * 0.12f + graphHeight * 0.56f * (1f - ((temp - minTemp) / range).toFloat())
+            IndexedPoint(index, Offset(x, y), temp)
         }
         points.zipWithNext().forEach { (a, b) ->
-            drawLine(lineColor, a, b, strokeWidth = 5f, cap = StrokeCap.Round)
+            drawLine(lineColor, a.offset, b.offset, strokeWidth = 5f, cap = StrokeCap.Round)
         }
-        points.forEach { drawCircle(lineColor, radius = 5f, center = it) }
+        points.forEach { point ->
+            drawCircle(lineColor, radius = 5f, center = point.offset)
+            drawContext.canvas.nativeCanvas.drawText(
+                "${point.temperature.roundText()}°",
+                point.offset.x,
+                (point.offset.y - 12f).coerceAtLeast(22f),
+                tempPaint,
+            )
+        }
+        hours.forEachIndexed { index, hour ->
+            val x = index * columnWidth + columnWidth / 2f
+            drawContext.canvas.nativeCanvas.drawText(formatHourLabel(hour.time), x, size.height - 8f, timePaint)
+        }
     }
 }
+
+private data class IndexedPoint(
+    val index: Int,
+    val offset: Offset,
+    val temperature: Double,
+)
 
 @Composable
 private fun HourCompactCard(hour: HourlyWeather) {
@@ -258,7 +311,7 @@ private fun HourCompactCard(hour: HourlyWeather) {
     ) {
         Column(
             Modifier
-                .width(76.dp)
+                .width(82.dp)
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -299,7 +352,7 @@ fun WeeklyRow(day: DailyWeather, onClick: () -> Unit) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(day.date, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(formatDateShort(day.date), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Text(weatherIcon(day.weatherCode), fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text("${day.maxTemperatureC?.roundText() ?: "--"}°", fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Text("${day.minTemperatureC?.roundText() ?: "--"}°", fontSize = 19.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -312,7 +365,7 @@ fun WeeklyRow(day: DailyWeather, onClick: () -> Unit) {
 fun DayDetailDialog(day: DailyWeather, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(day.date) },
+        title = { Text(formatDateLong(day.date)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("${weatherIcon(day.weatherCode)} ${weatherLabel(day.weatherCode)}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
@@ -327,54 +380,84 @@ fun DayDetailDialog(day: DailyWeather, onDismiss: () -> Unit) {
     )
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LocationDialog(
     state: WeatherUiState,
     onDismiss: () -> Unit,
     onSearchLocations: (String) -> Unit,
     onSelectLocation: (WeatherLocation) -> Unit,
+    onMoveLocation: (WeatherLocation, Int) -> Unit,
+    onDeleteLocation: (WeatherLocation) -> Unit,
     onUseDeviceLocation: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("地点を選択") },
+        title = { Text("地点") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = {
-                        query = it
-                        onSearchLocations(it)
-                    },
-                    singleLine = true,
-                    label = { Text("世界中の都市を検索") },
-                    placeholder = { Text("例: Seoul, London, New York") },
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                if (state.isSearchingLocation) {
-                    Text("検索中...", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                state.searchResults.take(8).forEach { location ->
-                    Text(
-                        text = location.name,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clickable { onSelectLocation(location) }
-                            .padding(vertical = 8.dp),
+            LazyColumn(
+                modifier = Modifier.heightIn(max = 520.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                item {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = {
+                            query = it
+                            onSearchLocations(it)
+                        },
+                        singleLine = true,
+                        label = { Text("世界中の都市を検索") },
+                        placeholder = { Text("例: Seoul, London, New York") },
+                        modifier = Modifier.fillMaxWidth(),
                     )
                 }
-                Text("プリセット", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    PresetLocations.drop(1).forEach { location ->
-                        AssistChip(
-                            onClick = { onSelectLocation(location) },
-                            label = { Text(location.name) },
+                item {
+                    TextButton(onClick = onUseDeviceLocation) {
+                        Text("現在地を使う")
+                    }
+                }
+                item {
+                    Text("保存地点", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                }
+                items(state.savedLocations) { location ->
+                    LocationRow(
+                        location = location,
+                        selected = location.samePlaceAs(state.selectedLocation),
+                        onSelect = { onSelectLocation(location) },
+                        onMoveUp = { onMoveLocation(location, -1) },
+                        onMoveDown = { onMoveLocation(location, 1) },
+                        onDelete = { onDeleteLocation(location) },
+                    )
+                }
+                item { HorizontalDivider() }
+                if (state.isSearchingLocation) {
+                    item { Text("検索中...", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                }
+                if (state.searchResults.isNotEmpty()) {
+                    item { Text("検索結果", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+                    items(state.searchResults.take(8)) { location ->
+                        Text(
+                            text = location.name,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectLocation(location) }
+                                .padding(vertical = 8.dp),
                         )
                     }
                 }
-                TextButton(onClick = onUseDeviceLocation) {
-                    Text("現在地を使う")
+                item {
+                    Text("プリセット", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    Spacer(Modifier.height(8.dp))
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PresetLocations.drop(1).forEach { location ->
+                            AssistChip(
+                                onClick = { onSelectLocation(location) },
+                                label = { Text(location.name) },
+                            )
+                        }
+                    }
                 }
             }
         },
@@ -382,6 +465,48 @@ private fun LocationDialog(
             TextButton(onClick = onDismiss) { Text("閉じる") }
         },
     )
+}
+
+@Composable
+private fun LocationRow(
+    location: WeatherLocation,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onMoveUp: () -> Unit,
+    onMoveDown: () -> Unit,
+    onDelete: () -> Unit,
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onSelect),
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(location.name, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "${location.latitude.oneDecimal()}, ${location.longitude.oneDecimal()}",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 11.sp,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                TextButton(onClick = onMoveUp) { Text("↑") }
+                TextButton(onClick = onMoveDown) { Text("↓") }
+                TextButton(onClick = onDelete) { Text("削除") }
+            }
+        }
+    }
 }
 
 @Composable
@@ -420,5 +545,20 @@ fun formatHourMinute(epochMillis: Long): String {
         .format(DateTimeFormatter.ofPattern("HH:mm"))
 }
 
+fun formatDateShort(date: String): String {
+    val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
+    return parsed?.format(DateTimeFormatter.ofPattern("M/d")) ?: date
+}
+
+fun formatDateLong(date: String): String {
+    val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
+    return parsed?.format(DateTimeFormatter.ofPattern("yyyy年M月d日")) ?: date
+}
+
 fun Double.roundText(): String = "%.0f".format(this)
 fun Double.oneDecimal(): String = "%.1f".format(this)
+
+private fun WeatherLocation.samePlaceAs(other: WeatherLocation): Boolean {
+    return "%.4f".format(latitude) == "%.4f".format(other.latitude) &&
+        "%.4f".format(longitude) == "%.4f".format(other.longitude)
+}

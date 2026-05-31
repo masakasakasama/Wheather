@@ -135,7 +135,7 @@ fun weatherIcon(code: Int?): String = when (code) {
 
 fun weatherLabel(code: Int?): String = when (code) {
     0 -> "快晴"
-    1, 2 -> "晴れ"
+    1, 2 -> "晴れ時々くもり"
     3 -> "くもり"
     45, 48 -> "霧"
     51, 53, 55, 56, 57 -> "霧雨"

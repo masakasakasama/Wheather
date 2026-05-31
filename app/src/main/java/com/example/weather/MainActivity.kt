@@ -83,6 +83,8 @@ class MainActivity : ComponentActivity() {
                     onUseDeviceLocation = viewModel::refreshUsingDeviceLocation,
                     onSelectLocation = viewModel::selectLocation,
                     onSearchLocations = viewModel::searchLocations,
+                    onMoveLocation = viewModel::moveLocation,
+                    onDeleteLocation = viewModel::deleteLocation,
                     onDismissError = viewModel::dismissError,
                 )
             }
@@ -98,10 +100,20 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 
     init {
         viewModelScope.launch {
-            combine(repository.weather, repository.selectedLocation) { weather, location ->
-                weather to location
-            }.collect { (weather, location) ->
-                _uiState.update { it.copy(snapshot = weather, selectedLocation = location) }
+            combine(
+                repository.weather,
+                repository.selectedLocation,
+                repository.savedLocations,
+            ) { weather, location, savedLocations ->
+                Triple(weather, location, savedLocations)
+            }.collect { (weather, location, savedLocations) ->
+                _uiState.update {
+                    it.copy(
+                        snapshot = weather,
+                        selectedLocation = location,
+                        savedLocations = savedLocations,
+                    )
+                }
             }
         }
     }
@@ -125,6 +137,18 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             repository.saveLocation(location)
             _uiState.update { it.copy(searchResults = emptyList()) }
             refresh(location)
+        }
+    }
+
+    fun moveLocation(location: WeatherLocation, direction: Int) {
+        viewModelScope.launch {
+            repository.moveLocation(location, direction)
+        }
+    }
+
+    fun deleteLocation(location: WeatherLocation) {
+        viewModelScope.launch {
+            repository.deleteLocation(location)
         }
     }
 
@@ -173,6 +197,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 data class WeatherUiState(
     val snapshot: WeatherSnapshot? = null,
     val selectedLocation: WeatherLocation = PresetLocations.first(),
+    val savedLocations: List<WeatherLocation> = PresetLocations,
     val searchResults: List<WeatherLocation> = emptyList(),
     val isRefreshing: Boolean = false,
     val isSearchingLocation: Boolean = false,
@@ -183,14 +208,15 @@ data class WeatherUiState(
 private fun WeatherTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
-            background = Color(0xFF050505),
-            surface = Color(0xFF111111),
-            surfaceVariant = Color(0xFF1B1B1B),
-            primary = Color(0xFFC8F048),
-            secondary = Color(0xFF87D7FF),
-            onBackground = Color(0xFFF4F4F4),
-            onSurface = Color(0xFFF4F4F4),
-            onSurfaceVariant = Color(0xFFC8C8C8),
+            background = Color(0xFF000000),
+            surface = Color(0xFF151518),
+            surfaceVariant = Color(0xFF202126),
+            primary = Color(0xFFBFFF3C),
+            secondary = Color(0xFF64D2FF),
+            tertiary = Color(0xFFFFD166),
+            onBackground = Color(0xFFF7F7F8),
+            onSurface = Color(0xFFF7F7F8),
+            onSurfaceVariant = Color(0xFFC7C7CC),
         ),
         content = content,
     )
@@ -203,20 +229,23 @@ private fun WeatherApp(
     onUseDeviceLocation: () -> Unit,
     onSelectLocation: (WeatherLocation) -> Unit,
     onSearchLocations: (String) -> Unit,
+    onMoveLocation: (WeatherLocation, Int) -> Unit,
+    onDeleteLocation: (WeatherLocation) -> Unit,
     onDismissError: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("ホーム", "雨雲", "時間", "週間")
+    val icons = listOf("●", "雨", "時", "週")
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(containerColor = Color(0xFF0B0B0B)) {
+            NavigationBar(containerColor = Color(0xFF09090B)) {
                 tabs.forEachIndexed { index, label ->
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
-                        icon = { Text(listOf("●", "雨", "時", "週")[index]) },
+                        icon = { Text(icons[index]) },
                         label = { Text(label) },
                     )
                 }
@@ -232,7 +261,16 @@ private fun WeatherApp(
         ) {
             Column(Modifier.fillMaxSize()) {
                 when (selectedTab) {
-                    0 -> HomeScreen(state, onRefresh, onUseDeviceLocation, onSelectLocation, onSearchLocations, onDismissError)
+                    0 -> HomeScreen(
+                        state = state,
+                        onRefresh = onRefresh,
+                        onUseDeviceLocation = onUseDeviceLocation,
+                        onSelectLocation = onSelectLocation,
+                        onSearchLocations = onSearchLocations,
+                        onMoveLocation = onMoveLocation,
+                        onDeleteLocation = onDeleteLocation,
+                        onDismissError = onDismissError,
+                    )
                     1 -> RadarScreen(state.selectedLocation)
                     2 -> HourlyScreen(state.snapshot)
                     3 -> WeeklyScreen(state.snapshot)

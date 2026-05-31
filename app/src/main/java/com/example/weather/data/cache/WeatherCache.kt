@@ -21,6 +21,7 @@ class WeatherCache(
 ) {
     private val snapshotKey = stringPreferencesKey("weather_snapshot")
     private val locationKey = stringPreferencesKey("selected_location")
+    private val savedLocationsKey = stringPreferencesKey("saved_locations")
 
     val snapshot: Flow<WeatherSnapshot?> = context.weatherDataStore.data.map { preferences ->
         preferences[snapshotKey]?.let { runCatching { json.decodeFromString<WeatherSnapshot>(it) }.getOrNull() }
@@ -31,9 +32,18 @@ class WeatherCache(
             ?: PresetLocations.first()
     }
 
+    val savedLocations: Flow<List<WeatherLocation>> = context.weatherDataStore.data.map { preferences ->
+        preferences[savedLocationsKey]
+            ?.let { runCatching { json.decodeFromString<List<WeatherLocation>>(it) }.getOrNull() }
+            ?.takeIf { it.isNotEmpty() }
+            ?: PresetLocations
+    }
+
     suspend fun readSnapshotOnce(): WeatherSnapshot? = snapshot.first()
 
     suspend fun readLocationOnce(): WeatherLocation = selectedLocation.first()
+
+    suspend fun readSavedLocationsOnce(): List<WeatherLocation> = savedLocations.first()
 
     suspend fun saveSnapshot(snapshot: WeatherSnapshot) {
         context.weatherDataStore.edit { preferences ->
@@ -46,4 +56,14 @@ class WeatherCache(
             preferences[locationKey] = json.encodeToString(location)
         }
     }
+
+    suspend fun saveLocations(locations: List<WeatherLocation>) {
+        context.weatherDataStore.edit { preferences ->
+            preferences[savedLocationsKey] = json.encodeToString(locations.distinctBy { it.identityKey() })
+        }
+    }
 }
+
+fun WeatherLocation.identityKey(): String = "${latitude.formatKey()},${longitude.formatKey()}"
+
+private fun Double.formatKey(): String = "%.4f".format(this)

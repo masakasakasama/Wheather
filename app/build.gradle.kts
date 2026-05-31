@@ -8,6 +8,7 @@ plugins {
 android {
     namespace = "com.example.weather"
     compileSdk = 36
+    val stableDebugKeystore = rootProject.file("debug.keystore")
 
     defaultConfig {
         applicationId = "com.example.weather"
@@ -19,10 +20,12 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            storeFile = rootProject.file("debug.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
+            if (stableDebugKeystore.exists()) {
+                storeFile = stableDebugKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
         }
     }
 
