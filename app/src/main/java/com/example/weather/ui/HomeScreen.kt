@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.weather.WeatherUiState
 import com.example.weather.data.model.DailyWeather
+import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
@@ -121,6 +122,9 @@ fun HomeScreen(
                 Text("天気を取得しています", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            if (state.disasterSummary?.hasImportantInfo == true) {
+                item { DisasterSummaryCard(state.disasterSummary) }
+            }
             item { CurrentSummary(snapshot) }
             item { RainSummary(snapshot) }
             item { HomeHourlySection(snapshot.hourly.take(12)) }
@@ -164,6 +168,39 @@ fun HomeScreen(
 
     selectedDay?.let { day ->
         DayDetailDialog(day = day, onDismiss = { selectedDay = null })
+    }
+}
+
+@Composable
+private fun DisasterSummaryCard(summary: DisasterSummary) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF2B1717)),
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("重要な気象情報", fontSize = 13.sp, color = Color(0xFFFFB4AB), fontWeight = FontWeight.SemiBold)
+            if (summary.typhoons.isNotEmpty()) {
+                summary.typhoons.forEach { typhoon ->
+                    Text(
+                        "台風第${typhoon.number}号 ${typhoon.category}",
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
+            }
+            if (summary.activeWarnings.isNotEmpty()) {
+                Text(
+                    "${summary.officeName ?: "現在地周辺"}: ${summary.activeWarnings.take(5).joinToString(" / ")}",
+                    color = MaterialTheme.colorScheme.onSurface,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            summary.warningHeadline?.let {
+                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+            Text("気象庁発表。避難判断は自治体・気象庁の最新情報を確認", color = Color(0xFFFFDAD6), fontSize = 11.sp)
+        }
     }
 }
 

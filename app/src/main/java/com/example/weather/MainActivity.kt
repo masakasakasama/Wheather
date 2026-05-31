@@ -33,6 +33,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.weather.data.model.AppUpdateInfo
+import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
@@ -226,8 +227,16 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
                         it.copy(errorMessage = "更新できませんでした。最後に成功したデータを表示します。${error.message.orEmpty()}")
                     }
                 }
+            refreshDisaster(location)
             _uiState.update { it.copy(isRefreshing = false) }
         }
+    }
+
+    private suspend fun refreshDisaster(location: WeatherLocation) {
+        AppServices.disasterClient.fetchSummary(location)
+            .onSuccess { summary ->
+                _uiState.update { it.copy(disasterSummary = summary) }
+            }
     }
 }
 
@@ -237,6 +246,7 @@ data class WeatherUiState(
     val savedLocations: List<WeatherLocation> = PresetLocations,
     val searchResults: List<WeatherLocation> = emptyList(),
     val updateInfo: AppUpdateInfo? = null,
+    val disasterSummary: DisasterSummary? = null,
     val isRefreshing: Boolean = false,
     val isSearchingLocation: Boolean = false,
     val isCheckingUpdate: Boolean = false,
