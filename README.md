@@ -4,12 +4,13 @@ Kotlin / Jetpack Compose / Material 3 / Jetpack Glanceで作った個人用のAn
 
 ## APKのダウンロード
 
-GitHubにpushすると `.github/workflows/build-apk.yml` がdebug APKをビルドします。
+GitHubにpushすると `.github/workflows/build-apk.yml` がdebug APKをビルドし、GitHub Releasesの `latest-debug` にAPKを配置します。
 
-1. GitHubリポジトリの `Actions` タブを開く
-2. `Build APK` の最新成功Runを開く
-3. `Artifacts` から `PersonalWeather-debug-apk` をダウンロード
-4. ZIPを展開し、`app-debug.apk` をAndroidスマホに転送してインストール
+スマホだけでインストールする場合:
+
+1. Androidスマホで https://github.com/masakasakasama/Wheather/releases/tag/latest-debug を開く
+2. `PersonalWeather-debug.apk` をタップしてダウンロード
+3. ダウンロード完了後、APKを開いてインストール
 
 debug APKなので、端末側で提供元不明アプリのインストール許可が必要です。
 

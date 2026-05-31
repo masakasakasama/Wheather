@@ -5,6 +5,9 @@ on:
     branches: ["main"]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-debug-apk:
     runs-on: ubuntu-latest
@@ -48,10 +51,25 @@ jobs:
           fi
           exit $status
 
+      - name: Prepare APK
+        run: cp app/build/outputs/apk/debug/app-debug.apk PersonalWeather-debug.apk
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PersonalWeather-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: PersonalWeather-debug.apk
           if-no-files-found: error
+
+      - name: Publish latest APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view latest-debug >/dev/null 2>&1; then
+            gh release upload latest-debug PersonalWeather-debug.apk --clobber
+          else
+            gh release create latest-debug PersonalWeather-debug.apk \
+              --title "Latest debug APK" \
+              --notes "スマホだけでインストールするための最新debug APKです。Android端末でこのReleaseを開き、PersonalWeather-debug.apkを直接ダウンロードしてください。"
+          fi
 
