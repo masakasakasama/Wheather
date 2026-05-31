@@ -67,13 +67,24 @@ jobs:
           exit $status
 
       - name: Prepare APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk PersonalWeather-debug.apk
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk PersonalWeather-debug.apk
+          cat > version.json <<EOF
+          {
+            "versionCode": ${VERSION_CODE},
+            "versionName": "${VERSION_NAME}",
+            "apkUrl": "https://github.com/masakasakasama/Wheather/releases/download/latest-debug/PersonalWeather-debug.apk",
+            "releaseUrl": "https://github.com/masakasakasama/Wheather/releases/tag/latest-debug"
+          }
+          EOF
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: PersonalWeather-debug-apk
-          path: PersonalWeather-debug.apk
+          path: |
+            PersonalWeather-debug.apk
+            version.json
           if-no-files-found: error
 
       - name: Publish latest APK release
@@ -81,9 +92,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view latest-debug >/dev/null 2>&1; then
-            gh release upload latest-debug PersonalWeather-debug.apk --clobber
+            gh release upload latest-debug PersonalWeather-debug.apk version.json --clobber
           else
-            gh release create latest-debug PersonalWeather-debug.apk \
+            gh release create latest-debug PersonalWeather-debug.apk version.json \
               --title "Latest debug APK" \
-              --notes "Androidスマホだけでインストールするための最新debug APKです。このReleaseをAndroid端末で開き、PersonalWeather-debug.apkを直接ダウンロードしてください。"
+              --notes "Latest debug APK for direct Android phone install. Open this release on your Android device and download PersonalWeather-debug.apk."
           fi

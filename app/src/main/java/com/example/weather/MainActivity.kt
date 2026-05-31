@@ -11,12 +11,14 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -30,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.weather.data.model.AppUpdateInfo
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
@@ -75,6 +78,7 @@ class MainActivity : ComponentActivity() {
                     } else {
                         viewModel.refreshOnLaunch()
                     }
+                    viewModel.checkForUpdate()
                 }
 
                 WeatherApp(
@@ -85,6 +89,8 @@ class MainActivity : ComponentActivity() {
                     onSearchLocations = viewModel::searchLocations,
                     onMoveLocation = viewModel::moveLocation,
                     onDeleteLocation = viewModel::deleteLocation,
+                    onInstallUpdate = viewModel::installUpdate,
+                    onDismissUpdate = viewModel::dismissUpdate,
                     onDismissError = viewModel::dismissError,
                 )
             }
@@ -180,6 +186,37 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(errorMessage = null) }
     }
 
+    fun dismissUpdate() {
+        _uiState.update { it.copy(updateInfo = null) }
+    }
+
+    fun checkForUpdate() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isCheckingUpdate = true) }
+            AppServices.updateClient.checkForUpdate(BuildConfig.VERSION_CODE)
+                .onSuccess { info ->
+                    _uiState.update { it.copy(updateInfo = info, isCheckingUpdate = false) }
+                }
+                .onFailure {
+                    _uiState.update { it.copy(isCheckingUpdate = false) }
+                }
+        }
+    }
+
+    fun installUpdate() {
+        val info = uiState.value.updateInfo ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isDownloadingUpdate = true) }
+            runCatching { AppServices.updateInstaller.downloadAndOpenInstaller(info) }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(errorMessage = "更新APKを開けませんでした。${error.message.orEmpty()}")
+                    }
+                }
+            _uiState.update { it.copy(isDownloadingUpdate = false) }
+        }
+    }
+
     private fun refresh(location: WeatherLocation) {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
@@ -199,8 +236,11 @@ data class WeatherUiState(
     val selectedLocation: WeatherLocation = PresetLocations.first(),
     val savedLocations: List<WeatherLocation> = PresetLocations,
     val searchResults: List<WeatherLocation> = emptyList(),
+    val updateInfo: AppUpdateInfo? = null,
     val isRefreshing: Boolean = false,
     val isSearchingLocation: Boolean = false,
+    val isCheckingUpdate: Boolean = false,
+    val isDownloadingUpdate: Boolean = false,
     val errorMessage: String? = null,
 )
 
@@ -231,6 +271,8 @@ private fun WeatherApp(
     onSearchLocations: (String) -> Unit,
     onMoveLocation: (WeatherLocation, Int) -> Unit,
     onDeleteLocation: (WeatherLocation) -> Unit,
+    onInstallUpdate: () -> Unit,
+    onDismissUpdate: () -> Unit,
     onDismissError: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
@@ -277,5 +319,35 @@ private fun WeatherApp(
                 }
             }
         }
+    }
+
+    val updateInfo = state.updateInfo
+    if (updateInfo != null) {
+        AlertDialog(
+            onDismissRequest = onDismissUpdate,
+            title = { Text("アップデートがあります") },
+            text = {
+                Text(
+                    if (state.isDownloadingUpdate) {
+                        "version ${updateInfo.versionName} をダウンロードしています。"
+                    } else {
+                        "新しい version ${updateInfo.versionName} をインストールできます。"
+                    },
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = onInstallUpdate,
+                    enabled = !state.isDownloadingUpdate,
+                ) {
+                    Text(if (state.isDownloadingUpdate) "準備中" else "更新する")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onDismissUpdate, enabled = !state.isDownloadingUpdate) {
+                    Text("あとで")
+                }
+            },
+        )
     }
 }
