@@ -32,4 +32,8 @@ class WeatherRepository(
     suspend fun saveLocation(location: WeatherLocation) {
         cache.saveLocation(location)
     }
+
+    suspend fun searchLocations(query: String): Result<List<WeatherLocation>> {
+        return runCatching { openMeteoClient.searchLocations(query) }
+    }
 }

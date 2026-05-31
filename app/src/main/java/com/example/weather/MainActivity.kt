@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
                     onRefresh = viewModel::refreshSelected,
                     onUseDeviceLocation = viewModel::refreshUsingDeviceLocation,
                     onSelectLocation = viewModel::selectLocation,
+                    onSearchLocations = viewModel::searchLocations,
                     onDismissError = viewModel::dismissError,
                 )
             }
@@ -122,7 +123,32 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     fun selectLocation(location: WeatherLocation) {
         viewModelScope.launch {
             repository.saveLocation(location)
+            _uiState.update { it.copy(searchResults = emptyList()) }
             refresh(location)
+        }
+    }
+
+    fun searchLocations(query: String) {
+        viewModelScope.launch {
+            val normalized = query.trim()
+            if (normalized.length < 2) {
+                _uiState.update { it.copy(searchResults = emptyList(), isSearchingLocation = false) }
+                return@launch
+            }
+            _uiState.update { it.copy(isSearchingLocation = true) }
+            repository.searchLocations(normalized)
+                .onSuccess { results ->
+                    _uiState.update { it.copy(searchResults = results, isSearchingLocation = false) }
+                }
+                .onFailure {
+                    _uiState.update {
+                        it.copy(
+                            searchResults = emptyList(),
+                            isSearchingLocation = false,
+                            errorMessage = "地点検索に失敗しました。",
+                        )
+                    }
+                }
         }
     }
 
@@ -147,7 +173,9 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 data class WeatherUiState(
     val snapshot: WeatherSnapshot? = null,
     val selectedLocation: WeatherLocation = PresetLocations.first(),
+    val searchResults: List<WeatherLocation> = emptyList(),
     val isRefreshing: Boolean = false,
+    val isSearchingLocation: Boolean = false,
     val errorMessage: String? = null,
 )
 
@@ -174,10 +202,11 @@ private fun WeatherApp(
     onRefresh: () -> Unit,
     onUseDeviceLocation: () -> Unit,
     onSelectLocation: (WeatherLocation) -> Unit,
+    onSearchLocations: (String) -> Unit,
     onDismissError: () -> Unit,
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("ホーム", "雨雲", "時間別", "週間")
+    val tabs = listOf("ホーム", "雨雲", "時間", "週間")
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
@@ -203,7 +232,7 @@ private fun WeatherApp(
         ) {
             Column(Modifier.fillMaxSize()) {
                 when (selectedTab) {
-                    0 -> HomeScreen(state, onRefresh, onUseDeviceLocation, onSelectLocation, onDismissError)
+                    0 -> HomeScreen(state, onRefresh, onUseDeviceLocation, onSelectLocation, onSearchLocations, onDismissError)
                     1 -> RadarScreen(state.selectedLocation)
                     2 -> HourlyScreen(state.snapshot)
                     3 -> WeeklyScreen(state.snapshot)

@@ -82,6 +82,21 @@ data class OpenMeteoDaily(
 )
 
 @Serializable
+data class GeocodingResponse(
+    val results: List<GeocodingResult> = emptyList(),
+)
+
+@Serializable
+data class GeocodingResult(
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    val country: String? = null,
+    @SerialName("admin1") val admin1: String? = null,
+    @SerialName("admin2") val admin2: String? = null,
+)
+
+@Serializable
 data class RadarTargetTime(
     val basetime: String,
     val validtime: String,
@@ -107,15 +122,15 @@ val PresetLocations = listOf(
 fun WeatherSnapshot.today(): DailyWeather? = daily.firstOrNull()
 
 fun weatherIcon(code: Int?): String = when (code) {
-    0 -> "☀"
-    1, 2 -> "🌤"
-    3 -> "☁"
+    0 -> "晴"
+    1, 2 -> "晴曇"
+    3 -> "曇"
     45, 48 -> "霧"
     51, 53, 55, 56, 57 -> "霧雨"
     61, 63, 65, 66, 67, 80, 81, 82 -> "雨"
     71, 73, 75, 77, 85, 86 -> "雪"
     95, 96, 99 -> "雷"
-    else -> "?"
+    else -> "--"
 }
 
 fun weatherLabel(code: Int?): String = when (code) {
@@ -130,4 +145,10 @@ fun weatherLabel(code: Int?): String = when (code) {
     85, 86 -> "にわか雪"
     95, 96, 99 -> "雷雨"
     else -> "不明"
+}
+
+fun GeocodingResult.toWeatherLocation(): WeatherLocation {
+    val area = listOfNotNull(admin1, country).distinct().joinToString(" / ")
+    val label = if (area.isBlank()) name else "$name ($area)"
+    return WeatherLocation(label, latitude, longitude)
 }

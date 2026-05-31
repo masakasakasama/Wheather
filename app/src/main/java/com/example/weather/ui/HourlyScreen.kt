@@ -3,7 +3,6 @@ package com.example.weather.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -49,6 +48,8 @@ fun HourlyScreen(snapshot: WeatherSnapshot?) {
             date == today || date == today.plusDays(1)
         }.take(48)
 
+        Text("黄緑: 気温 / 青: 降水確率", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+
         Row(Modifier.horizontalScroll(rememberScrollState())) {
             Column {
                 HourlyGraph(hours)
@@ -72,15 +73,16 @@ private fun HourlyGraph(hours: List<HourlyWeather>) {
     val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f)
     val gridColor = Color(0xFF2A2A2A)
 
-    Canvas(Modifier.width((hours.size * 64).dp).height(190.dp)) {
+    Canvas(Modifier.width((hours.size.coerceAtLeast(1) * 64).dp).height(210.dp)) {
+        if (hours.isEmpty()) return@Canvas
         val columnWidth = size.width / hours.size.coerceAtLeast(1)
-        repeat(4) { index ->
-            val y = size.height * index / 3f
+        repeat(5) { index ->
+            val y = size.height * index / 4f
             drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
         }
         hours.forEachIndexed { index, hour ->
             val probability = (hour.precipitationProbability ?: 0).coerceIn(0, 100)
-            val barHeight = size.height * 0.42f * probability / 100f
+            val barHeight = size.height * 0.4f * probability / 100f
             val x = index * columnWidth + columnWidth * 0.25f
             drawRoundRect(
                 color = barColor,
@@ -105,13 +107,11 @@ private fun HourlyGraph(hours: List<HourlyWeather>) {
 
 @Composable
 private fun HourCell(hour: HourlyWeather) {
-    val label = runCatching { "${LocalDateTime.parse(hour.time).hour}時" }.getOrDefault("--")
-    Column(Modifier.width(54.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-        Box(Modifier.height(26.dp)) {
-            Text(weatherIcon(hour.weatherCode), fontSize = 18.sp)
-        }
+    Column(Modifier.width(58.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(formatHourLabel(hour.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        Text(weatherIcon(hour.weatherCode), fontSize = 16.sp, fontWeight = FontWeight.Bold)
         Text("${hour.temperatureC?.roundText() ?: "--"}°", fontSize = 18.sp, fontWeight = FontWeight.Bold)
-        Text("${hour.precipitationProbability ?: "--"}%", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
+        Text("${hour.precipitationProbability ?: 0}%", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
+        Text("${hour.precipitationMm?.oneDecimal() ?: "0.0"}mm", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
     }
 }

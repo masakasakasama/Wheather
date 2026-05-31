@@ -2,10 +2,12 @@ package com.example.weather.data.api
 
 import com.example.weather.data.model.CurrentWeather
 import com.example.weather.data.model.DailyWeather
+import com.example.weather.data.model.GeocodingResponse
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.OpenMeteoResponse
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.toWeatherLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -26,6 +28,28 @@ class OpenMeteoClient(
             request(location, useJmaModel = false)?.copy(usedFallbackModel = true)
                 ?: throw IOException("Open-Meteo forecast request failed")
         }
+    }
+
+    suspend fun searchLocations(query: String): List<WeatherLocation> = withContext(Dispatchers.IO) {
+        val normalized = query.trim()
+        if (normalized.length < 2) return@withContext emptyList()
+        val url = "https://geocoding-api.open-meteo.com/v1/search".toHttpUrl().newBuilder()
+            .addQueryParameter("name", normalized)
+            .addQueryParameter("count", "10")
+            .addQueryParameter("language", "ja")
+            .addQueryParameter("format", "json")
+            .build()
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "PersonalWeather/1.0")
+            .build()
+        runCatching {
+            httpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) return@use emptyList()
+                val body = response.body?.string().orEmpty()
+                json.decodeFromString<GeocodingResponse>(body).results.map { it.toWeatherLocation() }
+            }
+        }.getOrDefault(emptyList())
     }
 
     private fun request(location: WeatherLocation, useJmaModel: Boolean): WeatherSnapshot? {
