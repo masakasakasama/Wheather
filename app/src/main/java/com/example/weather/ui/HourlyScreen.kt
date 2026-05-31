@@ -144,7 +144,7 @@ private fun HourCell(hour: HourlyWeather) {
                 .padding(10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
-            Text(formatHourLabel(hour.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text(formatDateHourLabel(hour.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
             Text(weatherIcon(hour.weatherCode), fontSize = 16.sp, fontWeight = FontWeight.Bold)
             Text("${hour.temperatureC?.roundText() ?: "--"}°", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text(hour.precipitationProbability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)

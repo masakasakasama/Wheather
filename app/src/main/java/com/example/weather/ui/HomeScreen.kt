@@ -243,7 +243,7 @@ private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeath
             Text(nextRainText(snapshot), fontSize = 23.sp, fontWeight = FontWeight.SemiBold)
             val peak = next48Hours.maxByOrNull { it.precipitationProbability ?: -1 }
             Text(
-                peak?.let { "48時間以内の最大降水確率 ${it.precipitationProbability.percentText()} (${formatHourLabel(it.time)})" }
+                peak?.let { "48時間以内の最大降水確率 ${it.precipitationProbability.percentText()} (${formatDateHourLabel(it.time)})" }
                     ?: "48時間以内の降水データなし",
                 color = MaterialTheme.colorScheme.secondary,
                 fontSize = 13.sp,
@@ -280,7 +280,7 @@ private fun MiniHourlyGraph(hours: List<HourlyWeather>) {
 
     Canvas(
         Modifier
-            .width((hours.size.coerceAtLeast(1) * 58).dp)
+            .width((hours.size.coerceAtLeast(1) * 92).dp)
             .height(190.dp),
     ) {
         if (hours.isEmpty()) return@Canvas
@@ -358,7 +358,7 @@ private fun HourCompactCard(hour: HourlyWeather) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(formatHourLabel(hour.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text(formatDateHourLabel(hour.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
             Text(weatherIcon(hour.weatherCode), fontSize = 17.sp, fontWeight = FontWeight.Bold)
             Text("${hour.temperatureC?.roundText() ?: "--"}°", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text(hour.precipitationProbability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
@@ -594,7 +594,7 @@ fun nextRainText(snapshot: WeatherSnapshot): String {
         (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) > 0.0
     }
     return next?.let {
-        "${formatHourLabel(it.time)}ごろから雨の可能性"
+        "${formatDateHourLabel(it.time)}ごろから雨の可能性"
     } ?: "48時間以内の雨の可能性は低め"
 }
 
@@ -606,6 +606,11 @@ fun formatHourLabel(time: String): String {
         else -> hour
     }
     return "${if (hour < 12) "AM" else "PM"} ${displayHour}時"
+}
+
+fun formatDateHourLabel(time: String): String {
+    val parsed = runCatching { LocalDateTime.parse(time) }.getOrNull() ?: return "--"
+    return "${parsed.format(DateTimeFormatter.ofPattern("M/d"))} ${formatHourLabel(time)}"
 }
 
 fun formatHourMinute(epochMillis: Long): String {
