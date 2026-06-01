@@ -331,7 +331,7 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
     val today = snapshot.today()
     val todayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111217)),
         shape = MaterialTheme.shapes.small,
     ) {
         Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -404,7 +404,7 @@ private fun AdviceCard(item: DailyAdvice, modifier: Modifier = Modifier) {
 @Composable
 private fun AirQualityCard(airQuality: AirQuality?) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF181A20)),
         shape = MaterialTheme.shapes.small,
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -444,7 +444,7 @@ private fun AirQualityCard(airQuality: AirQuality?) {
 @Composable
 private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF181A20)),
         shape = MaterialTheme.shapes.small,
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -470,7 +470,7 @@ private fun NowcastRainSection(minutes: List<MinutelyWeather>) {
         SectionHeader("直近3時間", "15分ごとの雨")
         if (minutes.isEmpty()) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF181A20)),
                 shape = MaterialTheme.shapes.small,
             ) {
                 Text(
@@ -494,7 +494,7 @@ private fun MinutelyRainCard(minute: MinutelyWeather) {
     val active = probability >= 30 || rain >= 0.1
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (active) Color(0xFF26313A) else MaterialTheme.colorScheme.surfaceVariant,
+            containerColor = if (active) Color(0xFF20313A) else Color(0xFF191B21),
         ),
         shape = MaterialTheme.shapes.small,
     ) {
@@ -535,11 +535,9 @@ private fun MinutelyRainCard(minute: MinutelyWeather) {
 private fun HomeHourlySection(hours: List<HourlyWeather>) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader("今後48時間", "1時間ごとの気温・降水")
-        Row(Modifier.horizontalScroll(rememberScrollState())) {
-            MiniHourlyGraph(hours)
-        }
         val scrollState = rememberScrollState()
-        Row(Modifier.horizontalScroll(scrollState), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.horizontalScroll(scrollState), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            MiniHourlyGraph(hours)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 hours.forEach { hour -> HourCompactCard(hour) }
             }
@@ -561,11 +559,11 @@ private fun MiniHourlyGraph(hours: List<HourlyWeather>) {
     Canvas(
         Modifier
             .width((hours.size.coerceAtLeast(1) * 92).dp)
-            .height(190.dp),
+            .height(156.dp),
     ) {
         if (hours.isEmpty()) return@Canvas
-        val topPad = 30f
-        val bottomPad = 40f
+        val topPad = 26f
+        val bottomPad = 32f
         val graphHeight = size.height - topPad - bottomPad
         val columnWidth = size.width / hours.size.coerceAtLeast(1)
         val tempPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -630,7 +628,9 @@ private fun HourCompactCard(hour: HourlyWeather) {
     val probability = (hour.precipitationProbability ?: 0).coerceIn(0, 100)
     val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = if (probability == 0) 0.14f else 0.75f)
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(
+            containerColor = if (probability > 0) Color(0xFF20313A) else Color(0xFF191B21),
+        ),
         shape = MaterialTheme.shapes.small,
     ) {
         Column(
