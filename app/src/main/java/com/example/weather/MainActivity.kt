@@ -311,8 +311,8 @@ private fun WeatherTheme(content: @Composable () -> Unit) {
     MaterialTheme(
         colorScheme = darkColorScheme(
             background = Color(0xFF000000),
-            surface = Color(0xFF151518),
-            surfaceVariant = Color(0xFF202126),
+            surface = Color(0xFF111217),
+            surfaceVariant = Color(0xFF191B21),
             primary = Color(0xFFBFFF3C),
             secondary = Color(0xFF64D2FF),
             tertiary = Color(0xFFFFD166),

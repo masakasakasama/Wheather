@@ -100,23 +100,14 @@ fun HomeScreen(
         contentPadding = PaddingValues(top = 18.dp, bottom = 22.dp),
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(state.selectedLocation.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(formatFreshness(snapshot?.updatedAtMillis), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Button(onClick = onRefresh, enabled = !state.isRefreshing) { Text(if (state.isRefreshing) "更新中" else "更新") }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    FilledTonalButton(onClick = { showLocationDialog = true }) { Text("地点") }
-                    FilledTonalButton(onClick = { showSettingsDialog = true }) { Text("設定") }
-                }
-            }
+            HomeHeader(
+                locationName = state.selectedLocation.name,
+                freshness = formatFreshness(snapshot?.updatedAtMillis),
+                isRefreshing = state.isRefreshing,
+                onRefresh = onRefresh,
+                onLocation = { showLocationDialog = true },
+                onSettings = { showSettingsDialog = true },
+            )
         }
 
         if (state.errorMessage != null) {
@@ -199,6 +190,34 @@ fun HomeScreen(
             dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(),
             onDismiss = { selectedDay = null },
         )
+    }
+}
+
+@Composable
+private fun HomeHeader(
+    locationName: String,
+    freshness: String,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
+    onLocation: () -> Unit,
+    onSettings: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(locationName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(freshness, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Button(onClick = onRefresh, enabled = !isRefreshing) { Text(if (isRefreshing) "更新中" else "更新") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FilledTonalButton(onClick = onLocation) { Text("地点") }
+            FilledTonalButton(onClick = onSettings) { Text("設定") }
+        }
     }
 }
 
@@ -334,21 +353,23 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
         colors = CardDefaults.cardColors(containerColor = Color(0xFF111217)),
         shape = MaterialTheme.shapes.small,
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", fontSize = 82.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
-                Spacer(Modifier.width(18.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(weatherIcon(snapshot.current.weatherCode), fontSize = 34.sp, fontWeight = FontWeight.Bold)
-                    Text(weatherLabel(snapshot.current.weatherCode), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("現在降水量 ${snapshot.current.precipitationMm?.oneDecimal() ?: "--"}mm", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
+        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", fontSize = 88.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
+                    Text("体感 ${snapshot.current.apparentTemperatureC.temperatureText()}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                }
+                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(weatherIcon(snapshot.current.weatherCode), fontSize = 42.sp, fontWeight = FontWeight.Bold)
+                    Text(weatherLabel(snapshot.current.weatherCode), fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+                    Text("現在 ${snapshot.current.precipitationMm?.oneDecimal() ?: "--"}mm", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
                 }
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Metric("最高", "${today?.maxTemperatureC?.roundText() ?: "--"}°")
-                Metric("最低", "${today?.minTemperatureC?.roundText() ?: "--"}°")
-                Metric("降水確率", today.effectiveMaxProbability(todayHours).percentText())
-                Metric("雨量", today.effectivePrecipitationSum(todayHours).mmText())
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                MetricTile("最高", "${today?.maxTemperatureC?.roundText() ?: "--"}°", Modifier.weight(1f))
+                MetricTile("最低", "${today?.minTemperatureC?.roundText() ?: "--"}°", Modifier.weight(1f))
+                MetricTile("降水", today.effectiveMaxProbability(todayHours).percentText(), Modifier.weight(1f))
+                MetricTile("雨量", today.effectivePrecipitationSum(todayHours).mmText(), Modifier.weight(1f))
             }
             HorizontalDivider(color = Color(0xFF303036))
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -389,13 +410,13 @@ private fun DailyAdviceSection(snapshot: WeatherSnapshot, next48Hours: List<Hour
 @Composable
 private fun AdviceCard(item: DailyAdvice, modifier: Modifier = Modifier) {
     Card(
-        modifier = modifier.heightIn(min = 116.dp),
+        modifier = modifier.heightIn(min = 102.dp),
         colors = CardDefaults.cardColors(containerColor = item.color),
         shape = MaterialTheme.shapes.small,
     ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+        Column(Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(item.label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
-            Text(item.value, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(item.value, fontSize = 20.sp, fontWeight = FontWeight.Bold)
             Text(item.detail, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
@@ -686,19 +707,22 @@ fun WeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, onClick: () -> U
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF17191F)),
         shape = MaterialTheme.shapes.small,
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(formatDateShort(day.date), fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(weatherIcon(day.weatherCode), fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                Text("${day.maxTemperatureC?.roundText() ?: "--"}°", fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text("${day.minTemperatureC?.roundText() ?: "--"}°", fontSize = 19.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column {
+                    Text(formatDateShort(day.date), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Text(weatherLabel(day.weatherCode), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(weatherIcon(day.weatherCode), fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("${day.maxTemperatureC?.roundText() ?: "--"}°", fontSize = 26.sp, fontWeight = FontWeight.Bold)
+                Text("${day.minTemperatureC?.roundText() ?: "--"}°", fontSize = 20.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Column(horizontalAlignment = Alignment.End) {
                     Text(day.effectiveMaxProbability(dayHours).percentText(), color = MaterialTheme.colorScheme.secondary)
                     Text(day.effectivePrecipitationSum(dayHours).mmText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
@@ -716,7 +740,7 @@ fun WeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, onClick: () -> U
 private fun PeriodChip(summary: DayPeriodSummary, modifier: Modifier = Modifier) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF101116)),
         shape = MaterialTheme.shapes.small,
     ) {
         Column(Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
@@ -884,10 +908,16 @@ private fun SectionHeader(title: String, subtitle: String) {
 }
 
 @Composable
-private fun Metric(label: String, value: String) {
-    Column {
-        Text(value, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text(label, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+private fun MetricTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1C22)),
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(Modifier.padding(vertical = 10.dp, horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
     }
 }
 
