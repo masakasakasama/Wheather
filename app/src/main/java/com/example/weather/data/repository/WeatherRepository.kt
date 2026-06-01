@@ -2,6 +2,7 @@ package com.example.weather.data.repository
 
 import android.content.Context
 import androidx.glance.appwidget.updateAll
+import com.example.weather.data.api.AirQualityClient
 import com.example.weather.data.api.OpenMeteoClient
 import com.example.weather.data.cache.WeatherCache
 import com.example.weather.data.cache.identityKey
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 class WeatherRepository(
     private val context: Context,
     private val openMeteoClient: OpenMeteoClient,
+    private val airQualityClient: AirQualityClient,
     private val cache: WeatherCache,
 ) {
     val weather: Flow<WeatherSnapshot?> = cache.snapshot
@@ -23,7 +25,10 @@ class WeatherRepository(
 
     suspend fun refresh(location: WeatherLocation): Result<WeatherSnapshot> {
         return runCatching {
-            val snapshot = openMeteoClient.fetchForecast(location)
+            val forecast = openMeteoClient.fetchForecast(location)
+            val snapshot = forecast.copy(
+                airQuality = airQualityClient.fetchAirQuality(location),
+            )
             saveLocation(location)
             cache.saveSnapshot(snapshot)
             WeatherWidget().updateAll(context)

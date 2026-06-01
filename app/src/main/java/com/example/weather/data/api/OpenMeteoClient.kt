@@ -76,15 +76,19 @@ class OpenMeteoClient(
             .header("User-Agent", "PersonalWeather/1.0")
             .build()
 
-        return try {
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return null
-                val body = response.body?.string() ?: return null
-                json.decodeFromString<OpenMeteoResponse>(body).toSnapshot(location)
+        repeat(2) {
+            try {
+                httpClient.newCall(request).execute().use { response ->
+                    if (response.isSuccessful) {
+                        val body = response.body?.string()
+                        if (body != null) return json.decodeFromString<OpenMeteoResponse>(body).toSnapshot(location)
+                    }
+                }
+            } catch (_: Exception) {
+                // Retry once; final failure falls back to the cached snapshot in the repository.
             }
-        } catch (_: Exception) {
-            null
         }
+        return null
     }
 
     private fun OpenMeteoResponse.toSnapshot(location: WeatherLocation): WeatherSnapshot {

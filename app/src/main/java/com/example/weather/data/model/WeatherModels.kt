@@ -18,6 +18,7 @@ data class WeatherSnapshot(
     val daily: List<DailyWeather>,
     val updatedAtMillis: Long,
     val usedFallbackModel: Boolean = false,
+    val airQuality: AirQuality? = null,
 )
 
 @Serializable
@@ -53,6 +54,27 @@ data class DailyWeather(
     val uvIndexMax: Double? = null,
     val sunrise: String? = null,
     val sunset: String? = null,
+)
+
+@Serializable
+data class AirQuality(
+    val time: String? = null,
+    val europeanAqi: Int? = null,
+    val usAqi: Int? = null,
+    val pm10: Double? = null,
+    val pm25: Double? = null,
+    val nitrogenDioxide: Double? = null,
+    val ozone: Double? = null,
+    val hourly: List<HourlyAirQuality> = emptyList(),
+)
+
+@Serializable
+data class HourlyAirQuality(
+    val time: String,
+    val europeanAqi: Int? = null,
+    val pm25: Double? = null,
+    val pm10: Double? = null,
+    val uvIndex: Double? = null,
 )
 
 @Serializable
@@ -97,6 +119,32 @@ data class OpenMeteoDaily(
     @SerialName("uv_index_max") val uvIndexMax: List<Double?> = emptyList(),
     val sunrise: List<String?> = emptyList(),
     val sunset: List<String?> = emptyList(),
+)
+
+@Serializable
+data class OpenMeteoAirQualityResponse(
+    val current: OpenMeteoAirQualityCurrent? = null,
+    val hourly: OpenMeteoAirQualityHourly? = null,
+)
+
+@Serializable
+data class OpenMeteoAirQualityCurrent(
+    val time: String? = null,
+    @SerialName("european_aqi") val europeanAqi: Int? = null,
+    @SerialName("us_aqi") val usAqi: Int? = null,
+    val pm10: Double? = null,
+    @SerialName("pm2_5") val pm25: Double? = null,
+    @SerialName("nitrogen_dioxide") val nitrogenDioxide: Double? = null,
+    val ozone: Double? = null,
+)
+
+@Serializable
+data class OpenMeteoAirQualityHourly(
+    val time: List<String> = emptyList(),
+    @SerialName("european_aqi") val europeanAqi: List<Int?> = emptyList(),
+    @SerialName("pm2_5") val pm25: List<Double?> = emptyList(),
+    val pm10: List<Double?> = emptyList(),
+    @SerialName("uv_index") val uvIndex: List<Double?> = emptyList(),
 )
 
 @Serializable

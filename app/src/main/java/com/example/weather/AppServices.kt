@@ -1,6 +1,7 @@
 package com.example.weather
 
 import android.content.Context
+import com.example.weather.data.api.AirQualityClient
 import com.example.weather.data.api.AppUpdateClient
 import com.example.weather.data.api.JmaDisasterClient
 import com.example.weather.data.api.JmaRadarClient
@@ -16,6 +17,8 @@ object AppServices {
     lateinit var cache: WeatherCache
         private set
     lateinit var repository: WeatherRepository
+        private set
+    lateinit var airQualityClient: AirQualityClient
         private set
     lateinit var radarClient: JmaRadarClient
         private set
@@ -38,7 +41,8 @@ object AppServices {
             .build()
         cache = WeatherCache(appContext, json)
         val openMeteoClient = OpenMeteoClient(httpClient, json)
-        repository = WeatherRepository(appContext, openMeteoClient, cache)
+        airQualityClient = AirQualityClient(httpClient, json)
+        repository = WeatherRepository(appContext, openMeteoClient, airQualityClient, cache)
         radarClient = JmaRadarClient(httpClient, json)
         disasterClient = JmaDisasterClient(httpClient, json)
         updateClient = AppUpdateClient(httpClient, json)

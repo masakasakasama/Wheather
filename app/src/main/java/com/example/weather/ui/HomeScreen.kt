@@ -54,6 +54,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.weather.WeatherUiState
+import com.example.weather.data.model.AirQuality
 import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
@@ -101,7 +102,7 @@ fun HomeScreen(
             ) {
                 Column {
                     Text(state.selectedLocation.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("前回更新 ${snapshot?.updatedAtMillis?.let(::formatHourMinute) ?: "--:--"}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(formatFreshness(snapshot?.updatedAtMillis), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilledTonalButton(onClick = { showLocationDialog = true }) { Text("地点") }
@@ -129,6 +130,7 @@ fun HomeScreen(
                 item { DisasterSummaryCard(state.disasterSummary) }
             }
             item { CurrentSummary(snapshot) }
+            item { AirQualityCard(snapshot.airQuality) }
             item { RainSummary(snapshot, next48Hours) }
             item { HomeHourlySection(next48Hours) }
             item {
@@ -243,6 +245,46 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
                     DetailMetric("日の出/入", "${formatTimeOnly(today?.sunrise)} / ${formatTimeOnly(today?.sunset)}", Modifier.weight(1f))
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AirQualityCard(airQuality: AirQuality?) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text("空気質", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    Text(aqiLabel(airQuality?.europeanAqi), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                }
+                Column(horizontalAlignment = Alignment.End) {
+                    Text("AQI ${airQuality?.europeanAqi?.toString() ?: "--"}", color = aqiColor(airQuality?.europeanAqi), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                    Text(airQuality?.time?.let(::formatDateHourLabel) ?: "未取得", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                AirMetric("PM2.5", airQuality?.pm25.microgramText(), Modifier.weight(1f))
+                AirMetric("PM10", airQuality?.pm10.microgramText(), Modifier.weight(1f))
+                AirMetric("オゾン", airQuality?.ozone.microgramText(), Modifier.weight(1f))
+            }
+            val peak = airQuality?.hourly
+                ?.filter { runCatching { !LocalDateTime.parse(it.time).isBefore(LocalDateTime.now(ZoneId.of("Asia/Tokyo")).withMinute(0).withSecond(0).withNano(0)) }.getOrDefault(false) }
+                ?.take(24)
+                ?.maxByOrNull { it.europeanAqi ?: -1 }
+            Text(
+                peak?.let { "24時間以内の最大AQI ${it.europeanAqi ?: "--"} (${formatDateHourLabel(it.time)})" }
+                    ?: "空気質データを取得できません",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+            )
         }
     }
 }
@@ -635,6 +677,14 @@ private fun DetailMetric(label: String, value: String, modifier: Modifier = Modi
     }
 }
 
+@Composable
+private fun AirMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 fun nextRainText(snapshot: WeatherSnapshot): String {
     val next = snapshot.hourly.nextHours(48).firstOrNull {
         (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) > 0.0
@@ -663,6 +713,14 @@ fun formatHourMinute(epochMillis: Long): String {
     return Instant.ofEpochMilli(epochMillis)
         .atZone(ZoneId.of("Asia/Tokyo"))
         .format(DateTimeFormatter.ofPattern("HH:mm"))
+}
+
+fun formatFreshness(epochMillis: Long?): String {
+    if (epochMillis == null) return "前回更新 --:--"
+    val updated = Instant.ofEpochMilli(epochMillis)
+    val ageMinutes = java.time.Duration.between(updated, Instant.now()).toMinutes()
+    val staleText = if (ageMinutes >= 120) "（古いデータ）" else ""
+    return "前回更新 ${formatHourMinute(epochMillis)}$staleText"
 }
 
 fun formatTimeOnly(time: String?): String {
@@ -725,6 +783,25 @@ fun Double?.mmText(): String = this?.let { "${it.oneDecimal()}mm" } ?: "--mm"
 fun Double?.temperatureText(): String = this?.let { "${it.roundText()}°" } ?: "--°"
 fun Double?.pressureText(): String = this?.let { "${it.roundText()}hPa" } ?: "--hPa"
 fun Double?.uvText(): String = this?.let { it.oneDecimal() } ?: "--"
+fun Double?.microgramText(): String = this?.let { "${it.oneDecimal()}μg/m³" } ?: "--μg/m³"
+
+fun aqiLabel(value: Int?): String = when (value) {
+    null -> "取得できません"
+    in 0..20 -> "良好"
+    in 21..40 -> "まあ良い"
+    in 41..60 -> "普通"
+    in 61..80 -> "悪い"
+    in 81..100 -> "非常に悪い"
+    else -> "かなり悪い"
+}
+
+@Composable
+fun aqiColor(value: Int?): Color = when (value) {
+    null -> MaterialTheme.colorScheme.onSurfaceVariant
+    in 0..40 -> MaterialTheme.colorScheme.primary
+    in 41..60 -> MaterialTheme.colorScheme.tertiary
+    else -> Color(0xFFFF8A80)
+}
 
 fun windText(speedKmh: Double?, directionDeg: Int?): String {
     val speed = speedKmh?.oneDecimal() ?: "--"

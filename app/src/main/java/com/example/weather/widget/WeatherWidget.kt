@@ -35,6 +35,7 @@ import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
 import com.example.weather.ui.formatHourMinute
 import com.example.weather.ui.nextRainText
+import com.example.weather.ui.nextHours
 
 class WeatherWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -93,21 +94,23 @@ private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
             Text(weatherIcon(snapshot.current.weatherCode), style = widgetText(18))
         }
         Text("降水 ${snapshot.today()?.maxPrecipitationProbability.percentText()} / ${snapshot.today()?.precipitationSumMm.mmText()}", style = widgetText(12, muted = true))
+        Text("AQI ${snapshot.airQuality?.europeanAqi?.toString() ?: "--"}", style = widgetText(11, muted = true), maxLines = 1)
         Text(nextRainText(snapshot), style = widgetText(11, muted = true), maxLines = 1)
     }
 }
 
 @androidx.compose.runtime.Composable
 private fun MediumWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
+    val hours = snapshot.hourly.nextHours(6)
     Column(modifier) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(32, bold = true))
             Spacer(GlanceModifier.width(10.dp))
-            Text("H ${snapshot.today()?.maxTemperatureC?.roundText() ?: "--"}° / L ${snapshot.today()?.minTemperatureC?.roundText() ?: "--"}° / ${snapshot.today()?.precipitationSumMm.mmText()}", style = widgetText(12, muted = true))
+            Text("H ${snapshot.today()?.maxTemperatureC?.roundText() ?: "--"}° / L ${snapshot.today()?.minTemperatureC?.roundText() ?: "--"}° / AQI ${snapshot.airQuality?.europeanAqi?.toString() ?: "--"}", style = widgetText(12, muted = true))
         }
         Spacer(GlanceModifier.height(6.dp))
-        Text(snapshot.hourly.take(6).joinToString(" ") { it.precipitationProbability.percentText() }, style = widgetText(12))
-        Text(snapshot.hourly.take(6).joinToString(" ") { "${it.temperatureC?.roundText() ?: "--"}°" }, style = widgetText(12, muted = true))
+        Text(hours.joinToString(" ") { it.precipitationProbability.percentText() }, style = widgetText(12))
+        Text(hours.joinToString(" ") { "${it.temperatureC?.roundText() ?: "--"}°" }, style = widgetText(12, muted = true))
         Text("更新 ${formatHourMinute(snapshot.updatedAtMillis)}", style = widgetText(10, muted = true))
     }
 }
