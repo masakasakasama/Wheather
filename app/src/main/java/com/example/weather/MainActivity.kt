@@ -233,7 +233,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             runCatching { AppServices.updateInstaller.downloadAndOpenInstaller(info) }
                 .onFailure { error ->
                     _uiState.update {
-                        it.copy(errorMessage = "更新APKを開けませんでした。${error.message.orEmpty()}")
+                        it.copy(errorMessage = error.message ?: "更新APKを開けませんでした。")
                     }
                 }
             _uiState.update { it.copy(isDownloadingUpdate = false) }
@@ -384,7 +384,7 @@ private fun WeatherApp(
                     if (state.isDownloadingUpdate) {
                         "version ${updateInfo.versionName} をダウンロードしています。"
                     } else {
-                        "新しい version ${updateInfo.versionName} をインストールできます。"
+                        "新しい version ${updateInfo.versionName} をインストールできます。初回だけ「この提供元のアプリを許可」が必要な場合があります。"
                     },
                 )
             },

@@ -47,6 +47,14 @@ jobs:
           path: debug.keystore
           key: personal-weather-debug-keystore-v1
 
+      - name: Restore stable debug keystore from release backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ ! -f debug.keystore ]; then
+            gh release download latest-debug --pattern PersonalWeather-debug-signing-key.keystore --output debug.keystore || true
+          fi
+
       - name: Create stable debug keystore
         run: |
           if [ ! -f debug.keystore ]; then
@@ -77,6 +85,7 @@ jobs:
       - name: Prepare APK
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk PersonalWeather-debug.apk
+          cp debug.keystore PersonalWeather-debug-signing-key.keystore
           cat > version.json <<EOF
           {
             "versionCode": ${VERSION_CODE},
@@ -93,6 +102,7 @@ jobs:
           path: |
             PersonalWeather-debug.apk
             version.json
+            PersonalWeather-debug-signing-key.keystore
           if-no-files-found: error
 
       - name: Publish latest APK release
@@ -100,9 +110,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view latest-debug >/dev/null 2>&1; then
-            gh release upload latest-debug PersonalWeather-debug.apk version.json --clobber
+            gh release upload latest-debug PersonalWeather-debug.apk version.json PersonalWeather-debug-signing-key.keystore --clobber
           else
-            gh release create latest-debug PersonalWeather-debug.apk version.json \
+            gh release create latest-debug PersonalWeather-debug.apk version.json PersonalWeather-debug-signing-key.keystore \
               --title "Latest debug APK" \
               --notes "Latest debug APK for direct Android phone install. Open this release on your Android device and download PersonalWeather-debug.apk."
           fi
