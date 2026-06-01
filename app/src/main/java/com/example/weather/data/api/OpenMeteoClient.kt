@@ -64,9 +64,9 @@ class OpenMeteoClient(
         val builder = "https://api.open-meteo.com/v1/forecast".toHttpUrl().newBuilder()
             .addQueryParameter("latitude", location.latitude.toString())
             .addQueryParameter("longitude", location.longitude.toString())
-            .addQueryParameter("current", "temperature_2m,weather_code,precipitation")
+            .addQueryParameter("current", "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation,wind_speed_10m,wind_direction_10m,pressure_msl")
             .addQueryParameter("hourly", "temperature_2m,precipitation_probability,weather_code,precipitation")
-            .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum")
+            .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset")
             .addQueryParameter("forecast_days", "14")
             .addQueryParameter("timezone", "Asia/Tokyo")
         if (useJmaModel) builder.addQueryParameter("models", "jma_seamless")
@@ -105,14 +105,22 @@ class OpenMeteoClient(
                 minTemperatureC = daily?.minTemperature?.getOrNull(index),
                 maxPrecipitationProbability = daily?.maxPrecipitationProbability?.getOrNull(index),
                 precipitationSumMm = daily?.precipitationSum?.getOrNull(index),
+                uvIndexMax = daily?.uvIndexMax?.getOrNull(index),
+                sunrise = daily?.sunrise?.getOrNull(index),
+                sunset = daily?.sunset?.getOrNull(index),
             )
         }
         return WeatherSnapshot(
             location = location,
             current = CurrentWeather(
                 temperatureC = current?.temperature,
+                apparentTemperatureC = current?.apparentTemperature,
+                humidityPercent = current?.humidity,
                 weatherCode = current?.weatherCode,
                 precipitationMm = current?.precipitation,
+                windSpeedKmh = current?.windSpeed,
+                windDirectionDeg = current?.windDirection,
+                pressureHpa = current?.pressure,
                 time = current?.time,
             ),
             hourly = hourlyItems,
@@ -137,6 +145,9 @@ class OpenMeteoClient(
                         ?: fallbackDaily[day.date]?.maxPrecipitationProbability,
                     precipitationSumMm = day.precipitationSumMm
                         ?: fallbackDaily[day.date]?.precipitationSumMm,
+                    uvIndexMax = day.uvIndexMax ?: fallbackDaily[day.date]?.uvIndexMax,
+                    sunrise = day.sunrise ?: fallbackDaily[day.date]?.sunrise,
+                    sunset = day.sunset ?: fallbackDaily[day.date]?.sunset,
                 )
             },
         )

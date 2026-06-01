@@ -74,7 +74,7 @@ private fun HourlyGraph(hours: List<HourlyWeather>) {
     val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f)
     val gridColor = Color(0xFF303036)
 
-    Canvas(Modifier.width((hours.size.coerceAtLeast(1) * 66).dp).height(230.dp)) {
+    Canvas(Modifier.width((hours.size.coerceAtLeast(1) * 82).dp).height(230.dp)) {
         if (hours.isEmpty()) return@Canvas
         val topPad = 34f
         val bottomPad = 38f

@@ -23,8 +23,13 @@ data class WeatherSnapshot(
 @Serializable
 data class CurrentWeather(
     val temperatureC: Double?,
+    val apparentTemperatureC: Double? = null,
+    val humidityPercent: Int? = null,
     val weatherCode: Int?,
     val precipitationMm: Double?,
+    val windSpeedKmh: Double? = null,
+    val windDirectionDeg: Int? = null,
+    val pressureHpa: Double? = null,
     val time: String?,
 )
 
@@ -45,6 +50,9 @@ data class DailyWeather(
     val minTemperatureC: Double?,
     val maxPrecipitationProbability: Int?,
     val precipitationSumMm: Double? = null,
+    val uvIndexMax: Double? = null,
+    val sunrise: String? = null,
+    val sunset: String? = null,
 )
 
 @Serializable
@@ -60,8 +68,13 @@ data class OpenMeteoResponse(
 data class OpenMeteoCurrent(
     val time: String? = null,
     @SerialName("temperature_2m") val temperature: Double? = null,
+    @SerialName("apparent_temperature") val apparentTemperature: Double? = null,
+    @SerialName("relative_humidity_2m") val humidity: Int? = null,
     @SerialName("weather_code") val weatherCode: Int? = null,
     val precipitation: Double? = null,
+    @SerialName("wind_speed_10m") val windSpeed: Double? = null,
+    @SerialName("wind_direction_10m") val windDirection: Int? = null,
+    @SerialName("pressure_msl") val pressure: Double? = null,
 )
 
 @Serializable
@@ -81,6 +94,9 @@ data class OpenMeteoDaily(
     @SerialName("temperature_2m_min") val minTemperature: List<Double?> = emptyList(),
     @SerialName("precipitation_probability_max") val maxPrecipitationProbability: List<Int?> = emptyList(),
     @SerialName("precipitation_sum") val precipitationSum: List<Double?> = emptyList(),
+    @SerialName("uv_index_max") val uvIndexMax: List<Double?> = emptyList(),
+    val sunrise: List<String?> = emptyList(),
+    val sunset: List<String?> = emptyList(),
 )
 
 @Serializable

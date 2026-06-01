@@ -41,18 +41,26 @@ jobs:
         with:
           gradle-version: 8.14.3
 
+      - name: Restore stable debug keystore
+        uses: actions/cache@v4
+        with:
+          path: debug.keystore
+          key: personal-weather-debug-keystore-v1
+
       - name: Create stable debug keystore
         run: |
-          rm -f debug.keystore
-          keytool -genkeypair \
-            -keystore debug.keystore \
-            -storepass android \
-            -keypass android \
-            -alias androiddebugkey \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -dname "CN=Android Debug,O=PersonalWeather,C=JP"
+          if [ ! -f debug.keystore ]; then
+            keytool -genkeypair \
+              -keystore debug.keystore \
+              -storepass android \
+              -keypass android \
+              -alias androiddebugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=PersonalWeather,C=JP"
+          fi
+          keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
 
       - name: Build debug APK
         run: |
