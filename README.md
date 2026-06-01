@@ -34,12 +34,16 @@ gradle assembleDebug
 
 - Open-Meteo Forecast API
   - `current`: `temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `weather_code`, `precipitation`, `wind_speed_10m`, `wind_direction_10m`, `pressure_msl`
+  - `minutely_15`: `temperature_2m`, `precipitation_probability`, `weather_code`, `precipitation`
   - `hourly`: `temperature_2m`, `precipitation_probability`, `weather_code`, `precipitation`
   - `daily`: `weather_code`, `temperature_2m_max`, `temperature_2m_min`, `precipitation_probability_max`, `precipitation_sum`, `uv_index_max`, `sunrise`, `sunset`
   - `forecast_days=14`
   - `timezone=Asia/Tokyo`
   - `models=jma_seamless` を優先し、失敗時はmodels指定なしへフォールバック
   - JMA Seamlessで降水確率が欠損する場合は、models指定なしのbest matchから降水確率と降水量を補完
+- 直近3時間の15分ごと雨予報
+  - Open-Meteo `minutely_15` を使い、降水確率・降水量・天気を表示
+  - 日本では一部の15分データが hourly からの補間になる可能性があるため、短時間の目安として扱う
 - Open-Meteo Geocoding APIによる世界都市検索
 - Open-Meteo Air Quality APIによる空気質表示
   - `current`: `european_aqi`, `us_aqi`, `pm10`, `pm2_5`, `nitrogen_dioxide`, `ozone`
@@ -64,7 +68,7 @@ gradle assembleDebug
 
 ## 画面
 
-- ホーム: 重要気象情報、現在気温、天気、最高/最低、降水確率、降水量、体感、湿度、風、気圧、UV、日の出/日の入、今日の判断、空気質、雨予測、今後48時間、2週間天気、通知設定を集約
+- ホーム: 重要気象情報、現在気温、天気、最高/最低、降水確率、降水量、体感、湿度、風、気圧、UV、日の出/日の入、今日の判断、空気質、雨予測、直近3時間、今後48時間、2週間天気、通知設定を集約
 - 地点: 保存地点をリスト表示し、上下並べ替え・削除・世界都市検索・現在地利用が可能
 - 雨雲: 現在地周辺の固定ズーム地図に雨雲タイルを重ねて表示
 - 時間: 現在時刻以降48時間の1時間ごとの気温・降水確率・降水量。グラフとカードは同じ1時間幅で同期し、時刻は日付つきAM/PM表記
@@ -73,6 +77,7 @@ gradle assembleDebug
 ## 制限事項
 
 - 雨雲レーダーは気象庁タイル仕様変更に弱いMVPです。取得失敗時はエラー表示にフォールバックします。
+- 15分ごとの短時間雨予報はOpen-Meteoの `minutely_15` を利用します。日本では高解像度モデルの直接値ではなく補間値になる場合があります。
 - 警報・注意報は現在地点に近い府県予報区をアプリ内の座標リストから推定します。市区町村単位の完全一致ではありません。
 - 台風情報は全国で発表中の台風を表示します。進路図や詳細諸元は未実装です。
 - 空気質はOpen-Meteo経由のCAMS系データです。観測局の実測値そのものではなく、予測モデル由来の値として扱います。

@@ -59,6 +59,7 @@ import com.example.weather.data.model.AirQuality
 import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
+import com.example.weather.data.model.MinutelyWeather
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
@@ -140,6 +141,7 @@ fun HomeScreen(
             item { DailyAdviceSection(snapshot, next48Hours) }
             item { AirQualityCard(snapshot.airQuality) }
             item { RainSummary(snapshot, next48Hours) }
+            item { NowcastRainSection(snapshot.minutely15.nextMinutely15(12)) }
             item { HomeHourlySection(next48Hours) }
             item {
                 HomeWeeklySection(
@@ -458,6 +460,73 @@ private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeath
             val today = snapshot.today()
             val todayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
             Text("今日の予想降水量 ${today.effectivePrecipitationSum(todayHours).mmText()}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+        }
+    }
+}
+
+@Composable
+private fun NowcastRainSection(minutes: List<MinutelyWeather>) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader("直近3時間", "15分ごとの雨")
+        if (minutes.isEmpty()) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                shape = MaterialTheme.shapes.small,
+            ) {
+                Text(
+                    "短時間予報を取得できません",
+                    modifier = Modifier.padding(16.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        } else {
+            Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                minutes.forEach { minute -> MinutelyRainCard(minute) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MinutelyRainCard(minute: MinutelyWeather) {
+    val probability = (minute.precipitationProbability ?: 0).coerceIn(0, 100)
+    val rain = minute.precipitationMm ?: 0.0
+    val active = probability >= 30 || rain >= 0.1
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = if (active) Color(0xFF26313A) else MaterialTheme.colorScheme.surfaceVariant,
+        ),
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(
+            Modifier
+                .width(76.dp)
+                .padding(10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(formatMinuteLabel(minute.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            Text(weatherIcon(minute.weatherCode), fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Text(minute.precipitationProbability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Canvas(Modifier.fillMaxWidth().height(28.dp)) {
+                val trackTop = size.height - 6f
+                drawRoundRect(
+                    color = Color(0xFF35363B),
+                    topLeft = Offset(0f, trackTop),
+                    size = Size(size.width, 6f),
+                    cornerRadius = CornerRadius(6f, 6f),
+                )
+                val barHeight = (size.height - 2f) * probability / 100f
+                if (probability > 0) {
+                    drawRoundRect(
+                        color = Color(0xFF64D2FF),
+                        topLeft = Offset(size.width * 0.24f, trackTop - barHeight),
+                        size = Size(size.width * 0.52f, barHeight),
+                        cornerRadius = CornerRadius(7f, 7f),
+                    )
+                }
+            }
+            Text(minute.precipitationMm.mmText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
         }
     }
 }
@@ -839,6 +908,12 @@ private fun AirMetric(label: String, value: String, modifier: Modifier = Modifie
 }
 
 fun nextRainText(snapshot: WeatherSnapshot): String {
+    val nextMinute = snapshot.minutely15.nextMinutely15(16).firstOrNull {
+        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) >= 0.1
+    }
+    if (nextMinute != null) {
+        return "${formatDateMinuteLabel(nextMinute.time)}ごろから雨の可能性"
+    }
     val next = snapshot.hourly.nextHours(48).firstOrNull {
         (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) > 0.0
     }
@@ -860,6 +935,22 @@ fun formatHourLabel(time: String): String {
 fun formatDateHourLabel(time: String): String {
     val parsed = runCatching { LocalDateTime.parse(time) }.getOrNull() ?: return "--"
     return "${parsed.format(DateTimeFormatter.ofPattern("M/d"))} ${formatHourLabel(time)}"
+}
+
+fun formatMinuteLabel(time: String): String {
+    val parsed = runCatching { LocalDateTime.parse(time) }.getOrNull() ?: return "--"
+    val hour = parsed.hour
+    val displayHour = when {
+        hour == 0 -> 12
+        hour > 12 -> hour - 12
+        else -> hour
+    }
+    return "${if (hour < 12) "AM" else "PM"} $displayHour:${parsed.minute.toString().padStart(2, '0')}"
+}
+
+fun formatDateMinuteLabel(time: String): String {
+    val parsed = runCatching { LocalDateTime.parse(time) }.getOrNull() ?: return "--"
+    return "${parsed.format(DateTimeFormatter.ofPattern("M/d"))} ${formatMinuteLabel(time)}"
 }
 
 fun formatHourMinute(epochMillis: Long): String {
@@ -895,6 +986,13 @@ fun List<HourlyWeather>.nextHours(count: Int): List<HourlyWeather> {
     val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo")).withMinute(0).withSecond(0).withNano(0)
     return filter { hour ->
         runCatching { !LocalDateTime.parse(hour.time).isBefore(now) }.getOrDefault(false)
+    }.take(count)
+}
+
+fun List<MinutelyWeather>.nextMinutely15(count: Int): List<MinutelyWeather> {
+    val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo")).minusMinutes(15)
+    return filter { minute ->
+        runCatching { !LocalDateTime.parse(minute.time).isBefore(now) }.getOrDefault(false)
     }.take(count)
 }
 

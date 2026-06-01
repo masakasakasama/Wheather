@@ -4,6 +4,7 @@ import com.example.weather.data.model.CurrentWeather
 import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.GeocodingResponse
 import com.example.weather.data.model.HourlyWeather
+import com.example.weather.data.model.MinutelyWeather
 import com.example.weather.data.model.OpenMeteoResponse
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
@@ -25,7 +26,8 @@ class OpenMeteoClient(
         if (preferred != null) {
             val needsProbabilityFallback =
                 preferred.daily.any { it.maxPrecipitationProbability == null } ||
-                    preferred.hourly.any { it.precipitationProbability == null }
+                    preferred.hourly.any { it.precipitationProbability == null } ||
+                    preferred.minutely15.any { it.precipitationProbability == null }
             val withProbabilities = if (needsProbabilityFallback) {
                 request(location, useJmaModel = false)?.let { preferred.withProbabilityFallback(it) } ?: preferred
             } else {
@@ -65,9 +67,11 @@ class OpenMeteoClient(
             .addQueryParameter("latitude", location.latitude.toString())
             .addQueryParameter("longitude", location.longitude.toString())
             .addQueryParameter("current", "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation,wind_speed_10m,wind_direction_10m,pressure_msl")
+            .addQueryParameter("minutely_15", "temperature_2m,precipitation_probability,weather_code,precipitation")
             .addQueryParameter("hourly", "temperature_2m,precipitation_probability,weather_code,precipitation")
             .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset")
             .addQueryParameter("forecast_days", "14")
+            .addQueryParameter("forecast_minutely_15", "16")
             .addQueryParameter("timezone", "Asia/Tokyo")
         if (useJmaModel) builder.addQueryParameter("models", "jma_seamless")
 
@@ -92,6 +96,15 @@ class OpenMeteoClient(
     }
 
     private fun OpenMeteoResponse.toSnapshot(location: WeatherLocation): WeatherSnapshot {
+        val minutelyItems = minutely15?.time.orEmpty().mapIndexed { index, time ->
+            MinutelyWeather(
+                time = time,
+                temperatureC = minutely15?.temperature?.getOrNull(index),
+                precipitationProbability = minutely15?.precipitationProbability?.getOrNull(index),
+                weatherCode = minutely15?.weatherCode?.getOrNull(index),
+                precipitationMm = minutely15?.precipitation?.getOrNull(index),
+            )
+        }
         val hourlyItems = hourly?.time.orEmpty().mapIndexed { index, time ->
             HourlyWeather(
                 time = time,
@@ -127,6 +140,7 @@ class OpenMeteoClient(
                 pressureHpa = current?.pressure,
                 time = current?.time,
             ),
+            minutely15 = minutelyItems,
             hourly = hourlyItems,
             daily = dailyItems,
             updatedAtMillis = System.currentTimeMillis(),
@@ -134,9 +148,16 @@ class OpenMeteoClient(
     }
 
     private fun WeatherSnapshot.withProbabilityFallback(fallback: WeatherSnapshot): WeatherSnapshot {
+        val fallbackMinutely = fallback.minutely15.associateBy { it.time }
         val fallbackHourly = fallback.hourly.associateBy { it.time }
         val fallbackDaily = fallback.daily.associateBy { it.date }
         return copy(
+            minutely15 = minutely15.map { minute ->
+                minute.copy(
+                    precipitationProbability = minute.precipitationProbability
+                        ?: fallbackMinutely[minute.time]?.precipitationProbability,
+                )
+            },
             hourly = hourly.map { hour ->
                 hour.copy(
                     precipitationProbability = hour.precipitationProbability

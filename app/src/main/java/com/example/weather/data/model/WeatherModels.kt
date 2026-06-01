@@ -14,6 +14,7 @@ data class WeatherLocation(
 data class WeatherSnapshot(
     val location: WeatherLocation,
     val current: CurrentWeather,
+    val minutely15: List<MinutelyWeather> = emptyList(),
     val hourly: List<HourlyWeather>,
     val daily: List<DailyWeather>,
     val updatedAtMillis: Long,
@@ -32,6 +33,15 @@ data class CurrentWeather(
     val windDirectionDeg: Int? = null,
     val pressureHpa: Double? = null,
     val time: String?,
+)
+
+@Serializable
+data class MinutelyWeather(
+    val time: String,
+    val temperatureC: Double?,
+    val precipitationProbability: Int?,
+    val weatherCode: Int?,
+    val precipitationMm: Double?,
 )
 
 @Serializable
@@ -91,6 +101,7 @@ data class OpenMeteoResponse(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val current: OpenMeteoCurrent? = null,
+    @SerialName("minutely_15") val minutely15: OpenMeteoMinutely15? = null,
     val hourly: OpenMeteoHourly? = null,
     val daily: OpenMeteoDaily? = null,
 )
@@ -110,6 +121,15 @@ data class OpenMeteoCurrent(
 
 @Serializable
 data class OpenMeteoHourly(
+    val time: List<String> = emptyList(),
+    @SerialName("temperature_2m") val temperature: List<Double?> = emptyList(),
+    @SerialName("precipitation_probability") val precipitationProbability: List<Int?> = emptyList(),
+    @SerialName("weather_code") val weatherCode: List<Int?> = emptyList(),
+    val precipitation: List<Double?> = emptyList(),
+)
+
+@Serializable
+data class OpenMeteoMinutely15(
     val time: List<String> = emptyList(),
     @SerialName("temperature_2m") val temperature: List<Double?> = emptyList(),
     @SerialName("precipitation_probability") val precipitationProbability: List<Int?> = emptyList(),
