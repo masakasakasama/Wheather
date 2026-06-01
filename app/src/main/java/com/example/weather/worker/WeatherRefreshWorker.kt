@@ -20,6 +20,13 @@ class WeatherRefreshWorker(
     override suspend fun doWork(): Result {
         AppServices.init(applicationContext)
         val result = AppServices.repository.refresh()
+        val snapshot = result.getOrNull()
+        val disasterSummary = snapshot?.let {
+            AppServices.disasterClient.fetchSummary(it.location).getOrNull()
+        }
+        if (snapshot != null) {
+            AppServices.notificationCenter.notifyWeatherEvents(snapshot, disasterSummary)
+        }
         WeatherWidget().updateAll(applicationContext)
         return if (result.isSuccess) Result.success() else Result.retry()
     }

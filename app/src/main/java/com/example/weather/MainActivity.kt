@@ -2,6 +2,7 @@ package com.example.weather
 
 import android.Manifest
 import android.app.Application
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -61,7 +62,10 @@ class MainActivity : ComponentActivity() {
                 val permissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions(),
                 ) { permissions ->
-                    if (permissions.values.any { it }) {
+                    val locationGranted =
+                        permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                            permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+                    if (locationGranted) {
                         viewModel.refreshUsingDeviceLocation()
                     } else {
                         viewModel.refreshSelected()
@@ -70,13 +74,11 @@ class MainActivity : ComponentActivity() {
 
                 LaunchedEffect(Unit) {
                     if (viewModel.needsPermissionPrompt()) {
-                        permissionLauncher.launch(
-                            arrayOf(
-                                Manifest.permission.ACCESS_FINE_LOCATION,
-                                Manifest.permission.ACCESS_COARSE_LOCATION,
-                            ),
-                        )
+                        permissionLauncher.launch(initialPermissions())
                     } else {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && viewModel.needsNotificationPermission()) {
+                            permissionLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+                        }
                         viewModel.refreshOnLaunch()
                     }
                     viewModel.checkForUpdate()
@@ -126,6 +128,11 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun needsPermissionPrompt(): Boolean = !locationProvider.hasLocationPermission()
+
+    fun needsNotificationPermission(): Boolean {
+        return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            getApplication<Application>().checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+    }
 
     fun refreshOnLaunch() {
         if (uiState.value.snapshot == null) refreshUsingDeviceLocation() else refreshSelected()
@@ -238,6 +245,17 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
                 _uiState.update { it.copy(disasterSummary = summary) }
             }
     }
+}
+
+private fun initialPermissions(): Array<String> {
+    val permissions = mutableListOf(
+        Manifest.permission.ACCESS_FINE_LOCATION,
+        Manifest.permission.ACCESS_COARSE_LOCATION,
+    )
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        permissions += Manifest.permission.POST_NOTIFICATIONS
+    }
+    return permissions.toTypedArray()
 }
 
 data class WeatherUiState(

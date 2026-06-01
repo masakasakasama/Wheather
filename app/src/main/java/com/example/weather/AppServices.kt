@@ -8,6 +8,7 @@ import com.example.weather.data.api.JmaRadarClient
 import com.example.weather.data.api.OpenMeteoClient
 import com.example.weather.data.cache.WeatherCache
 import com.example.weather.data.repository.WeatherRepository
+import com.example.weather.notification.WeatherNotificationCenter
 import com.example.weather.update.AppUpdateInstaller
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -28,6 +29,8 @@ object AppServices {
         private set
     lateinit var updateInstaller: AppUpdateInstaller
         private set
+    lateinit var notificationCenter: WeatherNotificationCenter
+        private set
 
     fun init(context: Context) {
         if (::repository.isInitialized) return
@@ -47,5 +50,7 @@ object AppServices {
         disasterClient = JmaDisasterClient(httpClient, json)
         updateClient = AppUpdateClient(httpClient, json)
         updateInstaller = AppUpdateInstaller(appContext, httpClient)
+        notificationCenter = WeatherNotificationCenter(appContext)
+        notificationCenter.ensureChannels()
     }
 }
