@@ -137,6 +137,7 @@ fun HomeScreen(
                 item { DisasterSummaryCard(state.disasterSummary) }
             }
             item { CurrentSummary(snapshot) }
+            item { DailyAdviceSection(snapshot, next48Hours) }
             item { AirQualityCard(snapshot.airQuality) }
             item { RainSummary(snapshot, next48Hours) }
             item { HomeHourlySection(next48Hours) }
@@ -360,6 +361,40 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
                     DetailMetric("日の出/入", "${formatTimeOnly(today?.sunrise)} / ${formatTimeOnly(today?.sunset)}", Modifier.weight(1f))
                 }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DailyAdviceSection(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>) {
+    val items = remember(snapshot, next48Hours) { buildDailyAdvice(snapshot, next48Hours) }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SectionHeader("今日の判断", "傘・洗濯・服装・外出")
+        items.chunked(2).forEach { rowItems ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                rowItems.forEach { item ->
+                    AdviceCard(item, Modifier.weight(1f))
+                }
+                if (rowItems.size == 1) {
+                    Spacer(Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AdviceCard(item: DailyAdvice, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier.heightIn(min = 116.dp),
+        colors = CardDefaults.cardColors(containerColor = item.color),
+        shape = MaterialTheme.shapes.small,
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            Text(item.label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text(item.value, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(item.detail, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
         }
     }
 }
@@ -876,6 +911,138 @@ data class DayPeriodSummary(
     val maxProbability: Int?,
     val precipitationSum: Double?,
 )
+
+data class DailyAdvice(
+    val label: String,
+    val value: String,
+    val detail: String,
+    val color: Color,
+)
+
+fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>): List<DailyAdvice> {
+    val today = snapshot.today()
+    val todayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
+    val next24Hours = next48Hours.take(24)
+    val maxProbability = today.effectiveMaxProbability(todayHours) ?: next24Hours.mapNotNull { it.precipitationProbability }.maxOrNull()
+    val precipitationSum = today.effectivePrecipitationSum(todayHours)
+    val rainHour = next24Hours.firstOrNull {
+        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) >= 0.2
+    }
+    val peakRainHour = next24Hours.maxByOrNull {
+        maxOf((it.precipitationProbability ?: 0).toDouble(), (it.precipitationMm ?: 0.0) * 100.0)
+    }
+    val maxTemp = today?.maxTemperatureC ?: next24Hours.mapNotNull { it.temperatureC }.maxOrNull()
+    val minTemp = today?.minTemperatureC ?: next24Hours.mapNotNull { it.temperatureC }.minOrNull()
+    val apparent = snapshot.current.apparentTemperatureC ?: snapshot.current.temperatureC
+    val humidity = snapshot.current.humidityPercent
+    val wind = snapshot.current.windSpeedKmh
+    val uv = today?.uvIndexMax
+    val aqi = snapshot.airQuality?.europeanAqi
+
+    val umbrella = when {
+        rainHour != null -> DailyAdvice(
+            label = "傘",
+            value = "持つ",
+            detail = "${formatDateHourLabel(rainHour.time)} ${rainHour.precipitationProbability.percentText()} / ${rainHour.precipitationMm.mmText()}",
+            color = Color(0xFF26313A),
+        )
+        (maxProbability ?: 0) >= 30 -> DailyAdvice(
+            label = "傘",
+            value = "折りたたみ",
+            detail = "24h最大 ${maxProbability.percentText()}${peakRainHour?.time?.let { " (${formatDateHourLabel(it)})" }.orEmpty()}",
+            color = Color(0xFF222831),
+        )
+        else -> DailyAdvice(
+            label = "傘",
+            value = "不要寄り",
+            detail = "24h最大 ${maxProbability.percentText()} / ${precipitationSum.mmText()}",
+            color = Color(0xFF1D241E),
+        )
+    }
+
+    val laundry = when {
+        (precipitationSum ?: 0.0) >= 1.0 || (maxProbability ?: 0) >= 50 -> DailyAdvice(
+            label = "洗濯",
+            value = "部屋干し",
+            detail = "降水 ${maxProbability.percentText()} / ${precipitationSum.mmText()}",
+            color = Color(0xFF2B2327),
+        )
+        (humidity ?: 0) >= 75 -> DailyAdvice(
+            label = "洗濯",
+            value = "乾きにくい",
+            detail = "湿度 ${humidity.percentText()}。外干しは短時間向き",
+            color = Color(0xFF272624),
+        )
+        (wind ?: 0.0) >= 35.0 -> DailyAdvice(
+            label = "洗濯",
+            value = "強風注意",
+            detail = "風 ${windText(wind, snapshot.current.windDirectionDeg)}",
+            color = Color(0xFF2B261D),
+        )
+        else -> DailyAdvice(
+            label = "洗濯",
+            value = "外干しOK",
+            detail = "降水 ${maxProbability.percentText()} / 湿度 ${humidity.percentText()}",
+            color = Color(0xFF1D241E),
+        )
+    }
+
+    val clothes = when {
+        (maxTemp ?: 0.0) >= 30.0 || (apparent ?: 0.0) >= 30.0 -> DailyAdvice(
+            label = "服装",
+            value = "暑さ対策",
+            detail = "最高 ${maxTemp.temperatureText()} / 体感 ${apparent.temperatureText()}",
+            color = Color(0xFF302315),
+        )
+        (minTemp ?: 99.0) <= 10.0 -> DailyAdvice(
+            label = "服装",
+            value = "防寒",
+            detail = "最低 ${minTemp.temperatureText()} / 最高 ${maxTemp.temperatureText()}",
+            color = Color(0xFF1D2633),
+        )
+        (minTemp ?: 99.0) <= 16.0 -> DailyAdvice(
+            label = "服装",
+            value = "羽織り",
+            detail = "最低 ${minTemp.temperatureText()}。朝晩は冷えやすい",
+            color = Color(0xFF222831),
+        )
+        else -> DailyAdvice(
+            label = "服装",
+            value = "軽め",
+            detail = "最高 ${maxTemp.temperatureText()} / 最低 ${minTemp.temperatureText()}",
+            color = Color(0xFF1E2422),
+        )
+    }
+
+    val outdoor = when {
+        (uv ?: 0.0) >= 6.0 -> DailyAdvice(
+            label = "外出",
+            value = "UV強め",
+            detail = "UV ${uv.uvText()}。日焼け止め推奨",
+            color = Color(0xFF2B2817),
+        )
+        (aqi ?: 0) >= 61 -> DailyAdvice(
+            label = "外出",
+            value = "空気注意",
+            detail = "AQI ${aqi ?: "--"} ${aqiLabel(aqi)}",
+            color = Color(0xFF2B2020),
+        )
+        (wind ?: 0.0) >= 35.0 -> DailyAdvice(
+            label = "外出",
+            value = "風強め",
+            detail = windText(wind, snapshot.current.windDirectionDeg),
+            color = Color(0xFF25252B),
+        )
+        else -> DailyAdvice(
+            label = "外出",
+            value = "動きやすい",
+            detail = "UV ${uv.uvText()} / AQI ${aqi ?: "--"}",
+            color = Color(0xFF1E2422),
+        )
+    }
+
+    return listOf(umbrella, laundry, clothes, outdoor)
+}
 
 fun dayPeriodSummaries(hours: List<HourlyWeather>): Pair<DayPeriodSummary, DayPeriodSummary> {
     return summarizePeriod("AM", hours.filter { runCatching { LocalDateTime.parse(it.time).hour < 12 }.getOrDefault(false) }) to
