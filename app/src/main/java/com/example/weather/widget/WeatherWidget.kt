@@ -87,13 +87,17 @@ private fun EmptyWidget(modifier: GlanceModifier) {
 
 @androidx.compose.runtime.Composable
 private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
+    val today = snapshot.today()
+    val todayHours = today?.let { day ->
+        snapshot.hourly.filter { it.time.take(10) == day.date }
+    }.orEmpty()
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(28, bold = true))
             Spacer(GlanceModifier.width(8.dp))
             Text(weatherIcon(snapshot.current.weatherCode), style = widgetText(18))
         }
-        Text("降水 ${snapshot.today()?.maxPrecipitationProbability.percentText()} / ${snapshot.today()?.precipitationSumMm.mmText()}", style = widgetText(12, muted = true))
+        Text("降水 ${today.effectiveMaxProbability(todayHours).percentText()} / ${today.effectivePrecipitationSum(todayHours).mmText()}", style = widgetText(12, muted = true))
         Text("AQI ${snapshot.airQuality?.europeanAqi?.toString() ?: "--"}", style = widgetText(11, muted = true), maxLines = 1)
         Text(nextRainText(snapshot), style = widgetText(11, muted = true), maxLines = 1)
     }
@@ -117,6 +121,9 @@ private fun MediumWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
 
 @androidx.compose.runtime.Composable
 private fun LargeWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
+    val hours = snapshot.hourly.nextHours(48)
+    val todayMax = hours.take(24).mapNotNull { it.precipitationProbability }.maxOrNull()
+    val tomorrowMax = hours.drop(24).take(24).mapNotNull { it.precipitationProbability }.maxOrNull()
     Column(modifier) {
         MediumWidget(snapshot, GlanceModifier.fillMaxWidth())
         Spacer(GlanceModifier.height(8.dp))
@@ -127,7 +134,7 @@ private fun LargeWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
             style = widgetText(12),
         )
         Text(
-            "今日明日 ${snapshot.hourly.take(24).mapNotNull { it.precipitationProbability }.maxOrNull().percentText()} / ${snapshot.hourly.drop(24).take(24).mapNotNull { it.precipitationProbability }.maxOrNull().percentText()}",
+            "今後48h ${todayMax.percentText()} / ${tomorrowMax.percentText()}",
             style = widgetText(11, muted = true),
         )
     }
@@ -145,3 +152,15 @@ private fun Double.roundText(): String = "%.0f".format(this)
 private fun Double.oneDecimal(): String = "%.1f".format(this)
 private fun Double?.mmText(): String = this?.let { "${it.oneDecimal()}mm" } ?: "--mm"
 private fun Int?.percentText(): String = this?.let { "$it%" } ?: "--%"
+private fun com.example.weather.data.model.DailyWeather?.effectiveMaxProbability(
+    dayHours: List<com.example.weather.data.model.HourlyWeather>,
+): Int? {
+    val hourlyMax = dayHours.mapNotNull { it.precipitationProbability }.maxOrNull()
+    return listOfNotNull(this?.maxPrecipitationProbability, hourlyMax).maxOrNull()
+}
+private fun com.example.weather.data.model.DailyWeather?.effectivePrecipitationSum(
+    dayHours: List<com.example.weather.data.model.HourlyWeather>,
+): Double? {
+    val hourlySum = dayHours.mapNotNull { it.precipitationMm }.sum().takeIf { it > 0.0 }
+    return listOfNotNull(this?.precipitationSumMm, hourlySum).maxOrNull()
+}

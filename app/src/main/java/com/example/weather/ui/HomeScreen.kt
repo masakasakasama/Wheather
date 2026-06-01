@@ -34,6 +34,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -58,6 +59,7 @@ import com.example.weather.data.model.AirQuality
 import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
+import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
@@ -80,9 +82,11 @@ fun HomeScreen(
     onSearchLocations: (String) -> Unit,
     onMoveLocation: (WeatherLocation, Int) -> Unit,
     onDeleteLocation: (WeatherLocation) -> Unit,
+    onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onDismissError: () -> Unit,
 ) {
     var showLocationDialog by remember { mutableStateOf(false) }
+    var showSettingsDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf<DailyWeather?>(null) }
     val snapshot = state.snapshot
     val next48Hours = remember(snapshot) { snapshot?.hourly?.nextHours(48).orEmpty() }
@@ -95,18 +99,21 @@ fun HomeScreen(
         contentPadding = PaddingValues(top = 18.dp, bottom = 22.dp),
     ) {
         item {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(state.selectedLocation.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text(formatFreshness(snapshot?.updatedAtMillis), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilledTonalButton(onClick = { showLocationDialog = true }) { Text("地点") }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(state.selectedLocation.name, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(formatFreshness(snapshot?.updatedAtMillis), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     Button(onClick = onRefresh, enabled = !state.isRefreshing) { Text(if (state.isRefreshing) "更新中" else "更新") }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    FilledTonalButton(onClick = { showLocationDialog = true }) { Text("地点") }
+                    FilledTonalButton(onClick = { showSettingsDialog = true }) { Text("設定") }
                 }
             }
         }
@@ -172,12 +179,120 @@ fun HomeScreen(
         )
     }
 
+    if (showSettingsDialog) {
+        NotificationSettingsDialog(
+            settings = state.notificationSettings,
+            onDismiss = { showSettingsDialog = false },
+            onSave = {
+                onUpdateNotificationSettings(it)
+                showSettingsDialog = false
+            },
+        )
+    }
+
     selectedDay?.let { day ->
         DayDetailDialog(
             day = day,
             dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(),
             onDismiss = { selectedDay = null },
         )
+    }
+}
+
+@Composable
+private fun NotificationSettingsDialog(
+    settings: NotificationSettings,
+    onDismiss: () -> Unit,
+    onSave: (NotificationSettings) -> Unit,
+) {
+    var draft by remember(settings) { mutableStateOf(settings) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("通知設定") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                SettingSwitchRow(
+                    title = "雨の接近",
+                    subtitle = "指定時間内に雨が強まりそうな時だけ通知",
+                    checked = draft.rainNotificationsEnabled,
+                    onCheckedChange = { draft = draft.copy(rainNotificationsEnabled = it) },
+                )
+                SettingStepperRow(
+                    label = "判定時間",
+                    value = "${draft.rainLookAheadHours}時間以内",
+                    onMinus = { draft = draft.copy(rainLookAheadHours = (draft.rainLookAheadHours - 1).coerceAtLeast(1)) },
+                    onPlus = { draft = draft.copy(rainLookAheadHours = (draft.rainLookAheadHours + 1).coerceAtMost(12)) },
+                )
+                SettingStepperRow(
+                    label = "降水確率",
+                    value = "${draft.rainProbabilityThreshold}%",
+                    onMinus = { draft = draft.copy(rainProbabilityThreshold = (draft.rainProbabilityThreshold - 10).coerceAtLeast(10)) },
+                    onPlus = { draft = draft.copy(rainProbabilityThreshold = (draft.rainProbabilityThreshold + 10).coerceAtMost(100)) },
+                )
+                SettingStepperRow(
+                    label = "雨量",
+                    value = "${draft.rainAmountThresholdMm.oneDecimal()}mm以上",
+                    onMinus = { draft = draft.copy(rainAmountThresholdMm = (draft.rainAmountThresholdMm - 0.1).coerceAtLeast(0.0)) },
+                    onPlus = { draft = draft.copy(rainAmountThresholdMm = (draft.rainAmountThresholdMm + 0.1).coerceAtMost(10.0)) },
+                )
+                HorizontalDivider(color = Color(0xFF303036))
+                SettingSwitchRow(
+                    title = "重要な気象情報",
+                    subtitle = "警報・注意報、台風情報を通知",
+                    checked = draft.disasterNotificationsEnabled,
+                    onCheckedChange = { draft = draft.copy(disasterNotificationsEnabled = it) },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(draft) }) { Text("保存") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("閉じる") }
+        },
+    )
+}
+
+@Composable
+private fun SettingSwitchRow(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+@Composable
+private fun SettingStepperRow(
+    label: String,
+    value: String,
+    onMinus: () -> Unit,
+    onPlus: () -> Unit,
+) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column {
+            Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            Text(value, fontSize = 18.sp, fontWeight = FontWeight.SemiBold)
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            TextButton(onClick = onMinus) { Text("-") }
+            TextButton(onClick = onPlus) { Text("+") }
+        }
     }
 }
 
@@ -316,6 +431,9 @@ private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeath
 private fun HomeHourlySection(hours: List<HourlyWeather>) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SectionHeader("今後48時間", "1時間ごとの気温・降水")
+        Row(Modifier.horizontalScroll(rememberScrollState())) {
+            MiniHourlyGraph(hours)
+        }
         val scrollState = rememberScrollState()
         Row(Modifier.horizontalScroll(scrollState), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {

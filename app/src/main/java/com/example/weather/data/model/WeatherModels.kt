@@ -57,6 +57,15 @@ data class DailyWeather(
 )
 
 @Serializable
+data class NotificationSettings(
+    val rainNotificationsEnabled: Boolean = true,
+    val disasterNotificationsEnabled: Boolean = true,
+    val rainLookAheadHours: Int = 3,
+    val rainProbabilityThreshold: Int = 60,
+    val rainAmountThresholdMm: Double = 0.2,
+)
+
+@Serializable
 data class AirQuality(
     val time: String? = null,
     val europeanAqi: Int? = null,

@@ -35,6 +35,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.weather.data.model.AppUpdateInfo
 import com.example.weather.data.model.DisasterSummary
+import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
@@ -62,10 +63,15 @@ class MainActivity : ComponentActivity() {
                 val permissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions(),
                 ) { permissions ->
+                    val askedLocation =
+                        permissions.containsKey(Manifest.permission.ACCESS_FINE_LOCATION) ||
+                            permissions.containsKey(Manifest.permission.ACCESS_COARSE_LOCATION)
                     val locationGranted =
                         permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                             permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-                    if (locationGranted) {
+                    if (!askedLocation) {
+                        return@rememberLauncherForActivityResult
+                    } else if (locationGranted) {
                         viewModel.refreshUsingDeviceLocation()
                     } else {
                         viewModel.refreshSelected()
@@ -92,6 +98,7 @@ class MainActivity : ComponentActivity() {
                     onSearchLocations = viewModel::searchLocations,
                     onMoveLocation = viewModel::moveLocation,
                     onDeleteLocation = viewModel::deleteLocation,
+                    onUpdateNotificationSettings = viewModel::updateNotificationSettings,
                     onInstallUpdate = viewModel::installUpdate,
                     onDismissUpdate = viewModel::dismissUpdate,
                     onDismissError = viewModel::dismissError,
@@ -113,14 +120,16 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
                 repository.weather,
                 repository.selectedLocation,
                 repository.savedLocations,
-            ) { weather, location, savedLocations ->
-                Triple(weather, location, savedLocations)
-            }.collect { (weather, location, savedLocations) ->
+                repository.notificationSettings,
+            ) { weather, location, savedLocations, notificationSettings ->
+                WeatherStateBundle(weather, location, savedLocations, notificationSettings)
+            }.collect { bundle ->
                 _uiState.update {
                     it.copy(
-                        snapshot = weather,
-                        selectedLocation = location,
-                        savedLocations = savedLocations,
+                        snapshot = bundle.weather,
+                        selectedLocation = bundle.location,
+                        savedLocations = bundle.savedLocations,
+                        notificationSettings = bundle.notificationSettings,
                     )
                 }
             }
@@ -163,6 +172,12 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     fun deleteLocation(location: WeatherLocation) {
         viewModelScope.launch {
             repository.deleteLocation(location)
+        }
+    }
+
+    fun updateNotificationSettings(settings: NotificationSettings) {
+        viewModelScope.launch {
+            repository.saveNotificationSettings(settings)
         }
     }
 
@@ -265,11 +280,19 @@ data class WeatherUiState(
     val searchResults: List<WeatherLocation> = emptyList(),
     val updateInfo: AppUpdateInfo? = null,
     val disasterSummary: DisasterSummary? = null,
+    val notificationSettings: NotificationSettings = NotificationSettings(),
     val isRefreshing: Boolean = false,
     val isSearchingLocation: Boolean = false,
     val isCheckingUpdate: Boolean = false,
     val isDownloadingUpdate: Boolean = false,
     val errorMessage: String? = null,
+)
+
+private data class WeatherStateBundle(
+    val weather: WeatherSnapshot?,
+    val location: WeatherLocation,
+    val savedLocations: List<WeatherLocation>,
+    val notificationSettings: NotificationSettings,
 )
 
 @Composable
@@ -299,6 +322,7 @@ private fun WeatherApp(
     onSearchLocations: (String) -> Unit,
     onMoveLocation: (WeatherLocation, Int) -> Unit,
     onDeleteLocation: (WeatherLocation) -> Unit,
+    onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onInstallUpdate: () -> Unit,
     onDismissUpdate: () -> Unit,
     onDismissError: () -> Unit,
@@ -339,6 +363,7 @@ private fun WeatherApp(
                         onSearchLocations = onSearchLocations,
                         onMoveLocation = onMoveLocation,
                         onDeleteLocation = onDeleteLocation,
+                        onUpdateNotificationSettings = onUpdateNotificationSettings,
                         onDismissError = onDismissError,
                     )
                     1 -> RadarScreen(state.selectedLocation)

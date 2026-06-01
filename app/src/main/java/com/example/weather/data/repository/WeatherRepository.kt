@@ -6,6 +6,7 @@ import com.example.weather.data.api.AirQualityClient
 import com.example.weather.data.api.OpenMeteoClient
 import com.example.weather.data.cache.WeatherCache
 import com.example.weather.data.cache.identityKey
+import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.widget.WeatherWidget
@@ -20,6 +21,7 @@ class WeatherRepository(
     val weather: Flow<WeatherSnapshot?> = cache.snapshot
     val selectedLocation: Flow<WeatherLocation> = cache.selectedLocation
     val savedLocations: Flow<List<WeatherLocation>> = cache.savedLocations
+    val notificationSettings: Flow<NotificationSettings> = cache.notificationSettings
 
     suspend fun refresh(): Result<WeatherSnapshot> = refresh(cache.readLocationOnce())
 
@@ -64,6 +66,16 @@ class WeatherRepository(
         if (cache.readLocationOnce().identityKey() == location.identityKey()) {
             cache.saveLocation(next.firstOrNull() ?: current.first())
         }
+    }
+
+    suspend fun saveNotificationSettings(settings: NotificationSettings) {
+        cache.saveNotificationSettings(
+            settings.copy(
+                rainLookAheadHours = settings.rainLookAheadHours.coerceIn(1, 12),
+                rainProbabilityThreshold = settings.rainProbabilityThreshold.coerceIn(10, 100),
+                rainAmountThresholdMm = settings.rainAmountThresholdMm.coerceIn(0.0, 10.0),
+            ),
+        )
     }
 
     suspend fun searchLocations(query: String): Result<List<WeatherLocation>> {

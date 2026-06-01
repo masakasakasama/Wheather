@@ -15,6 +15,7 @@ import com.example.weather.MainActivity
 import com.example.weather.R
 import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
+import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherSnapshot
 import java.time.LocalDateTime
 import java.time.ZoneId
@@ -38,16 +39,21 @@ class WeatherNotificationCenter(
         manager.createNotificationChannel(channel)
     }
 
-    fun notifyWeatherEvents(snapshot: WeatherSnapshot, disasterSummary: DisasterSummary?) {
+    fun notifyWeatherEvents(
+        snapshot: WeatherSnapshot,
+        disasterSummary: DisasterSummary?,
+        settings: NotificationSettings,
+    ) {
         if (!canNotify()) return
         ensureChannels()
-        notifyRainIfNeeded(snapshot)
-        notifyDisasterIfNeeded(disasterSummary)
+        if (settings.rainNotificationsEnabled) notifyRainIfNeeded(snapshot, settings)
+        if (settings.disasterNotificationsEnabled) notifyDisasterIfNeeded(disasterSummary)
     }
 
-    private fun notifyRainIfNeeded(snapshot: WeatherSnapshot) {
-        val rainHour = snapshot.hourly.nextNotificationHours(3).firstOrNull {
-            (it.precipitationProbability ?: 0) >= 60 || (it.precipitationMm ?: 0.0) >= 0.2
+    private fun notifyRainIfNeeded(snapshot: WeatherSnapshot, settings: NotificationSettings) {
+        val rainHour = snapshot.hourly.nextNotificationHours(settings.rainLookAheadHours).firstOrNull {
+            (it.precipitationProbability ?: 0) >= settings.rainProbabilityThreshold ||
+                (it.precipitationMm ?: 0.0) >= settings.rainAmountThresholdMm
         } ?: return
         val signature = "${rainHour.time}:${rainHour.precipitationProbability}:${rainHour.precipitationMm}"
         if (!shouldNotify("rain_signature", signature)) return

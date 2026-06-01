@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.weather.data.model.PresetLocations
+import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import kotlinx.coroutines.flow.Flow
@@ -22,6 +23,7 @@ class WeatherCache(
     private val snapshotKey = stringPreferencesKey("weather_snapshot")
     private val locationKey = stringPreferencesKey("selected_location")
     private val savedLocationsKey = stringPreferencesKey("saved_locations")
+    private val notificationSettingsKey = stringPreferencesKey("notification_settings")
 
     val snapshot: Flow<WeatherSnapshot?> = context.weatherDataStore.data.map { preferences ->
         preferences[snapshotKey]?.let { runCatching { json.decodeFromString<WeatherSnapshot>(it) }.getOrNull() }
@@ -39,11 +41,19 @@ class WeatherCache(
             ?: PresetLocations
     }
 
+    val notificationSettings: Flow<NotificationSettings> = context.weatherDataStore.data.map { preferences ->
+        preferences[notificationSettingsKey]
+            ?.let { runCatching { json.decodeFromString<NotificationSettings>(it) }.getOrNull() }
+            ?: NotificationSettings()
+    }
+
     suspend fun readSnapshotOnce(): WeatherSnapshot? = snapshot.first()
 
     suspend fun readLocationOnce(): WeatherLocation = selectedLocation.first()
 
     suspend fun readSavedLocationsOnce(): List<WeatherLocation> = savedLocations.first()
+
+    suspend fun readNotificationSettingsOnce(): NotificationSettings = notificationSettings.first()
 
     suspend fun saveSnapshot(snapshot: WeatherSnapshot) {
         context.weatherDataStore.edit { preferences ->
@@ -60,6 +70,12 @@ class WeatherCache(
     suspend fun saveLocations(locations: List<WeatherLocation>) {
         context.weatherDataStore.edit { preferences ->
             preferences[savedLocationsKey] = json.encodeToString(locations.distinctBy { it.identityKey() })
+        }
+    }
+
+    suspend fun saveNotificationSettings(settings: NotificationSettings) {
+        context.weatherDataStore.edit { preferences ->
+            preferences[notificationSettingsKey] = json.encodeToString(settings)
         }
     }
 }

@@ -25,7 +25,8 @@ class WeatherRefreshWorker(
             AppServices.disasterClient.fetchSummary(it.location).getOrNull()
         }
         if (snapshot != null) {
-            AppServices.notificationCenter.notifyWeatherEvents(snapshot, disasterSummary)
+            val settings = AppServices.cache.readNotificationSettingsOnce()
+            AppServices.notificationCenter.notifyWeatherEvents(snapshot, disasterSummary, settings)
         }
         WeatherWidget().updateAll(applicationContext)
         return if (result.isSuccess) Result.success() else Result.retry()
