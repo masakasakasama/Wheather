@@ -2,6 +2,8 @@ package com.example.weather
 
 import android.Manifest
 import android.app.Application
+import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -100,6 +102,7 @@ class MainActivity : ComponentActivity() {
                     onDeleteLocation = viewModel::deleteLocation,
                     onUpdateNotificationSettings = viewModel::updateNotificationSettings,
                     onInstallUpdate = viewModel::installUpdate,
+                    onOpenUpdateInBrowser = viewModel::openUpdateInBrowser,
                     onDismissUpdate = viewModel::dismissUpdate,
                     onDismissError = viewModel::dismissError,
                 )
@@ -240,6 +243,13 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
+    fun openUpdateInBrowser() {
+        val info = uiState.value.updateInfo ?: return
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(info.apkUrl))
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        getApplication<Application>().startActivity(intent)
+    }
+
     private fun refresh(location: WeatherLocation) {
         viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
@@ -324,6 +334,7 @@ private fun WeatherApp(
     onDeleteLocation: (WeatherLocation) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
     onInstallUpdate: () -> Unit,
+    onOpenUpdateInBrowser: () -> Unit,
     onDismissUpdate: () -> Unit,
     onDismissError: () -> Unit,
 ) {
@@ -389,11 +400,19 @@ private fun WeatherApp(
                 )
             },
             confirmButton = {
-                TextButton(
-                    onClick = onInstallUpdate,
-                    enabled = !state.isDownloadingUpdate,
-                ) {
-                    Text(if (state.isDownloadingUpdate) "準備中" else "更新する")
+                Row {
+                    TextButton(
+                        onClick = onOpenUpdateInBrowser,
+                        enabled = !state.isDownloadingUpdate,
+                    ) {
+                        Text("ブラウザで開く")
+                    }
+                    TextButton(
+                        onClick = onInstallUpdate,
+                        enabled = !state.isDownloadingUpdate,
+                    ) {
+                        Text(if (state.isDownloadingUpdate) "準備中" else "更新する")
+                    }
                 }
             },
             dismissButton = {
