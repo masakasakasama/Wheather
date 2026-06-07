@@ -104,6 +104,7 @@ class MainActivity : ComponentActivity() {
 
                 WeatherApp(
                     state = state,
+                    appVersionName = BuildConfig.VERSION_NAME,
                     onRefresh = viewModel::refreshSelected,
                     onUseDeviceLocation = viewModel::refreshUsingDeviceLocation,
                     onSelectLocation = viewModel::selectLocation,
@@ -111,6 +112,8 @@ class MainActivity : ComponentActivity() {
                     onMoveLocation = viewModel::moveLocation,
                     onDeleteLocation = viewModel::deleteLocation,
                     onUpdateNotificationSettings = viewModel::updateNotificationSettings,
+                    onCheckUpdate = { viewModel.checkForUpdate(manual = true) },
+                    onDismissUpdateCheckMessage = viewModel::dismissUpdateCheckMessage,
                     onInstallUpdate = viewModel::installUpdate,
                     onOpenUpdateInBrowser = viewModel::openUpdateInBrowser,
                     onDismissUpdate = viewModel::dismissUpdate,
@@ -226,17 +229,36 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
         _uiState.update { it.copy(updateInfo = null) }
     }
 
-    fun checkForUpdate() {
+    fun checkForUpdate(manual: Boolean = false) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isCheckingUpdate = true) }
+            _uiState.update { it.copy(isCheckingUpdate = true, updateCheckMessage = null) }
             AppServices.updateClient.checkForUpdate(BuildConfig.VERSION_CODE)
                 .onSuccess { info ->
-                    _uiState.update { it.copy(updateInfo = info, isCheckingUpdate = false) }
+                    _uiState.update {
+                        it.copy(
+                            updateInfo = info,
+                            isCheckingUpdate = false,
+                            updateCheckMessage = when {
+                                info != null -> null
+                                manual -> "お使いのバージョンが最新です"
+                                else -> null
+                            },
+                        )
+                    }
                 }
                 .onFailure {
-                    _uiState.update { it.copy(isCheckingUpdate = false) }
+                    _uiState.update {
+                        it.copy(
+                            isCheckingUpdate = false,
+                            updateCheckMessage = if (manual) "アップデートを確認できませんでした" else null,
+                        )
+                    }
                 }
         }
+    }
+
+    fun dismissUpdateCheckMessage() {
+        _uiState.update { it.copy(updateCheckMessage = null) }
     }
 
     fun installUpdate() {
@@ -305,6 +327,7 @@ data class WeatherUiState(
     val isSearchingLocation: Boolean = false,
     val isCheckingUpdate: Boolean = false,
     val isDownloadingUpdate: Boolean = false,
+    val updateCheckMessage: String? = null,
     val errorMessage: String? = null,
 )
 
@@ -318,6 +341,7 @@ private data class WeatherStateBundle(
 @Composable
 private fun WeatherApp(
     state: WeatherUiState,
+    appVersionName: String,
     onRefresh: () -> Unit,
     onUseDeviceLocation: () -> Unit,
     onSelectLocation: (WeatherLocation) -> Unit,
@@ -325,6 +349,8 @@ private fun WeatherApp(
     onMoveLocation: (WeatherLocation, Int) -> Unit,
     onDeleteLocation: (WeatherLocation) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
+    onCheckUpdate: () -> Unit,
+    onDismissUpdateCheckMessage: () -> Unit,
     onInstallUpdate: () -> Unit,
     onOpenUpdateInBrowser: () -> Unit,
     onDismissUpdate: () -> Unit,
@@ -375,6 +401,7 @@ private fun WeatherApp(
                 when (selectedTab) {
                     0 -> HomeScreen(
                         state = state,
+                        appVersionName = appVersionName,
                         onRefresh = onRefresh,
                         onUseDeviceLocation = onUseDeviceLocation,
                         onSelectLocation = onSelectLocation,
@@ -382,6 +409,8 @@ private fun WeatherApp(
                         onMoveLocation = onMoveLocation,
                         onDeleteLocation = onDeleteLocation,
                         onUpdateNotificationSettings = onUpdateNotificationSettings,
+                        onCheckUpdate = onCheckUpdate,
+                        onDismissUpdateCheckMessage = onDismissUpdateCheckMessage,
                         onDismissError = onDismissError,
                     )
                     1 -> RadarScreen(state.selectedLocation)

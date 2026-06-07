@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.Air
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.AlertDialog
@@ -49,6 +50,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Switch
@@ -95,6 +97,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun HomeScreen(
     state: WeatherUiState,
+    appVersionName: String,
     onRefresh: () -> Unit,
     onUseDeviceLocation: () -> Unit,
     onSelectLocation: (WeatherLocation) -> Unit,
@@ -102,6 +105,8 @@ fun HomeScreen(
     onMoveLocation: (WeatherLocation, Int) -> Unit,
     onDeleteLocation: (WeatherLocation) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
+    onCheckUpdate: () -> Unit,
+    onDismissUpdateCheckMessage: () -> Unit,
     onDismissError: () -> Unit,
 ) {
     var showLocationDialog by remember { mutableStateOf(false) }
@@ -194,10 +199,18 @@ fun HomeScreen(
     if (showSettingsDialog) {
         NotificationSettingsDialog(
             settings = state.notificationSettings,
-            onDismiss = { showSettingsDialog = false },
+            appVersionName = appVersionName,
+            isCheckingUpdate = state.isCheckingUpdate,
+            updateCheckMessage = state.updateCheckMessage,
+            onCheckUpdate = onCheckUpdate,
+            onDismiss = {
+                showSettingsDialog = false
+                onDismissUpdateCheckMessage()
+            },
             onSave = {
                 onUpdateNotificationSettings(it)
                 showSettingsDialog = false
+                onDismissUpdateCheckMessage()
             },
         )
     }
@@ -285,13 +298,17 @@ private fun HomeHeader(
 @Composable
 private fun NotificationSettingsDialog(
     settings: NotificationSettings,
+    appVersionName: String,
+    isCheckingUpdate: Boolean,
+    updateCheckMessage: String?,
+    onCheckUpdate: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (NotificationSettings) -> Unit,
 ) {
     var draft by remember(settings) { mutableStateOf(settings) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("通知設定") },
+        title = { Text("設定") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 SettingSwitchRow(
@@ -324,6 +341,13 @@ private fun NotificationSettingsDialog(
                     subtitle = "警報・注意報、台風情報を通知",
                     checked = draft.disasterNotificationsEnabled,
                     onCheckedChange = { draft = draft.copy(disasterNotificationsEnabled = it) },
+                )
+                HorizontalDivider(color = WeatherPalette.Outline)
+                AppUpdateRow(
+                    appVersionName = appVersionName,
+                    isCheckingUpdate = isCheckingUpdate,
+                    updateCheckMessage = updateCheckMessage,
+                    onCheckUpdate = onCheckUpdate,
                 )
             }
         },
@@ -375,6 +399,41 @@ private fun SettingStepperRow(
         Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             TextButton(onClick = onMinus) { Text("-") }
             TextButton(onClick = onPlus) { Text("+") }
+        }
+    }
+}
+
+@Composable
+private fun AppUpdateRow(
+    appVersionName: String,
+    isCheckingUpdate: Boolean,
+    updateCheckMessage: String?,
+    onCheckUpdate: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("アプリのアップデート", fontWeight = FontWeight.SemiBold)
+                Text("現在のバージョン v$appVersionName", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+            OutlinedButton(onClick = onCheckUpdate, enabled = !isCheckingUpdate) {
+                if (isCheckingUpdate) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("確認中")
+                } else {
+                    Icon(Icons.Outlined.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("確認")
+                }
+            }
+        }
+        if (updateCheckMessage != null) {
+            Text(updateCheckMessage, color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
         }
     }
 }
