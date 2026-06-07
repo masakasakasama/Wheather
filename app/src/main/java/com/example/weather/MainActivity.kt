@@ -15,15 +15,21 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.Grain
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -43,9 +49,12 @@ import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.location.LocationProvider
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import com.example.weather.ui.HomeScreen
 import com.example.weather.ui.HourlyScreen
 import com.example.weather.ui.RadarScreen
+import com.example.weather.ui.WeatherTheme
 import com.example.weather.ui.WeeklyScreen
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -307,24 +316,6 @@ private data class WeatherStateBundle(
 )
 
 @Composable
-private fun WeatherTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme = darkColorScheme(
-            background = Color(0xFF000000),
-            surface = Color(0xFF111217),
-            surfaceVariant = Color(0xFF191B21),
-            primary = Color(0xFFBFFF3C),
-            secondary = Color(0xFF64D2FF),
-            tertiary = Color(0xFFFFD166),
-            onBackground = Color(0xFFF7F7F8),
-            onSurface = Color(0xFFF7F7F8),
-            onSurfaceVariant = Color(0xFFC7C7CC),
-        ),
-        content = content,
-    )
-}
-
-@Composable
 private fun WeatherApp(
     state: WeatherUiState,
     onRefresh: () -> Unit,
@@ -341,18 +332,33 @@ private fun WeatherApp(
 ) {
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf("ホーム", "雨雲", "時間", "週間")
-    val icons = listOf("●", "雨", "時", "週")
+    val icons: List<ImageVector> = listOf(
+        Icons.Outlined.WbSunny,
+        Icons.Outlined.Grain,
+        Icons.Outlined.Schedule,
+        Icons.Outlined.CalendarMonth,
+    )
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
-            NavigationBar(containerColor = Color(0xFF09090B)) {
+            NavigationBar(
+                containerColor = Color(0xFF0E1320),
+                tonalElevation = 0.dp,
+            ) {
                 tabs.forEachIndexed { index, label ->
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
-                        icon = { Text(icons[index]) },
+                        icon = { Icon(icons[index], contentDescription = label) },
                         label = { Text(label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        ),
                     )
                 }
             }

@@ -72,7 +72,7 @@ private fun HourlyGraph(hours: List<HourlyWeather>) {
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val mutedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.55f)
-    val gridColor = Color(0xFF303036)
+    val gridColor = Color(0xFF2C3447)
 
     Canvas(Modifier.width((hours.size.coerceAtLeast(1) * 82).dp).height(230.dp)) {
         if (hours.isEmpty()) return@Canvas

@@ -142,7 +142,7 @@ private fun RadarTileGrid(radar: RadarUiState.Ready) {
     BoxWithConstraints(
         Modifier
             .fillMaxSize()
-            .background(Color(0xFF111111)),
+            .background(Color(0xFF0A0E16)),
         contentAlignment = Alignment.Center,
     ) {
         val tileSize = maxWidth / 3
