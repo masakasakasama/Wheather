@@ -37,6 +37,8 @@ import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -254,23 +256,27 @@ private fun HomeHeader(
             ) {
                 Icon(Icons.Outlined.Tune, contentDescription = "設定")
             }
-            FilledIconButton(
+            Button(
                 onClick = onRefresh,
                 enabled = !isRefreshing,
-                colors = IconButtonDefaults.filledIconButtonColors(
+                shape = MaterialTheme.shapes.small,
+                colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
                 ),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
             ) {
                 if (isRefreshing) {
                     CircularProgressIndicator(
-                        modifier = Modifier.size(20.dp),
+                        modifier = Modifier.size(18.dp),
                         strokeWidth = 2.dp,
                         color = MaterialTheme.colorScheme.onPrimary,
                     )
                 } else {
-                    Icon(Icons.Outlined.Refresh, contentDescription = "更新")
+                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
                 }
+                Spacer(Modifier.width(6.dp))
+                Text(if (isRefreshing) "更新中" else "更新", fontWeight = FontWeight.SemiBold)
             }
         }
     }
