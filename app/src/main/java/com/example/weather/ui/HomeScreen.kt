@@ -4,9 +4,11 @@ import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -18,21 +20,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.outlined.Air
+import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.SystemUpdate
+import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Switch
@@ -45,6 +63,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -78,6 +97,7 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun HomeScreen(
     state: WeatherUiState,
+    appVersionName: String,
     onRefresh: () -> Unit,
     onUseDeviceLocation: () -> Unit,
     onSelectLocation: (WeatherLocation) -> Unit,
@@ -85,6 +105,8 @@ fun HomeScreen(
     onMoveLocation: (WeatherLocation, Int) -> Unit,
     onDeleteLocation: (WeatherLocation) -> Unit,
     onUpdateNotificationSettings: (NotificationSettings) -> Unit,
+    onCheckUpdate: () -> Unit,
+    onDismissUpdateCheckMessage: () -> Unit,
     onDismissError: () -> Unit,
 ) {
     var showLocationDialog by remember { mutableStateOf(false) }
@@ -177,10 +199,18 @@ fun HomeScreen(
     if (showSettingsDialog) {
         NotificationSettingsDialog(
             settings = state.notificationSettings,
-            onDismiss = { showSettingsDialog = false },
+            appVersionName = appVersionName,
+            isCheckingUpdate = state.isCheckingUpdate,
+            updateCheckMessage = state.updateCheckMessage,
+            onCheckUpdate = onCheckUpdate,
+            onDismiss = {
+                showSettingsDialog = false
+                onDismissUpdateCheckMessage()
+            },
             onSave = {
                 onUpdateNotificationSettings(it)
                 showSettingsDialog = false
+                onDismissUpdateCheckMessage()
             },
         )
     }
@@ -203,21 +233,64 @@ private fun HomeHeader(
     onLocation: () -> Unit,
     onSettings: () -> Unit,
 ) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(
-            Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(
+                    Icons.Outlined.LocationOn,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp),
+                )
                 Text(locationName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(freshness, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            Button(onClick = onRefresh, enabled = !isRefreshing) { Text(if (isRefreshing) "更新中" else "更新") }
+            Text(freshness, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FilledTonalButton(onClick = onLocation) { Text("地点") }
-            FilledTonalButton(onClick = onSettings) { Text("設定") }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            FilledTonalIconButton(
+                onClick = onLocation,
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = WeatherPalette.SurfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
+                Icon(Icons.Outlined.Search, contentDescription = "地点")
+            }
+            FilledTonalIconButton(
+                onClick = onSettings,
+                colors = IconButtonDefaults.filledTonalIconButtonColors(
+                    containerColor = WeatherPalette.SurfaceVariant,
+                    contentColor = MaterialTheme.colorScheme.onSurface,
+                ),
+            ) {
+                Icon(Icons.Outlined.Tune, contentDescription = "設定")
+            }
+            Button(
+                onClick = onRefresh,
+                enabled = !isRefreshing,
+                shape = MaterialTheme.shapes.small,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ),
+                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
+            ) {
+                if (isRefreshing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = MaterialTheme.colorScheme.onPrimary,
+                    )
+                } else {
+                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(if (isRefreshing) "更新中" else "更新", fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }
@@ -225,13 +298,17 @@ private fun HomeHeader(
 @Composable
 private fun NotificationSettingsDialog(
     settings: NotificationSettings,
+    appVersionName: String,
+    isCheckingUpdate: Boolean,
+    updateCheckMessage: String?,
+    onCheckUpdate: () -> Unit,
     onDismiss: () -> Unit,
     onSave: (NotificationSettings) -> Unit,
 ) {
     var draft by remember(settings) { mutableStateOf(settings) }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("通知設定") },
+        title = { Text("設定") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 SettingSwitchRow(
@@ -258,12 +335,19 @@ private fun NotificationSettingsDialog(
                     onMinus = { draft = draft.copy(rainAmountThresholdMm = (draft.rainAmountThresholdMm - 0.1).coerceAtLeast(0.0)) },
                     onPlus = { draft = draft.copy(rainAmountThresholdMm = (draft.rainAmountThresholdMm + 0.1).coerceAtMost(10.0)) },
                 )
-                HorizontalDivider(color = Color(0xFF303036))
+                HorizontalDivider(color = Color(0xFF2C3447))
                 SettingSwitchRow(
                     title = "重要な気象情報",
                     subtitle = "警報・注意報、台風情報を通知",
                     checked = draft.disasterNotificationsEnabled,
                     onCheckedChange = { draft = draft.copy(disasterNotificationsEnabled = it) },
+                )
+                HorizontalDivider(color = WeatherPalette.Outline)
+                AppUpdateRow(
+                    appVersionName = appVersionName,
+                    isCheckingUpdate = isCheckingUpdate,
+                    updateCheckMessage = updateCheckMessage,
+                    onCheckUpdate = onCheckUpdate,
                 )
             }
         },
@@ -320,13 +404,59 @@ private fun SettingStepperRow(
 }
 
 @Composable
+private fun AppUpdateRow(
+    appVersionName: String,
+    isCheckingUpdate: Boolean,
+    updateCheckMessage: String?,
+    onCheckUpdate: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text("アプリのアップデート", fontWeight = FontWeight.SemiBold)
+                Text("現在のバージョン v$appVersionName", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+            }
+            OutlinedButton(onClick = onCheckUpdate, enabled = !isCheckingUpdate) {
+                if (isCheckingUpdate) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("確認中")
+                } else {
+                    Icon(Icons.Outlined.SystemUpdate, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("確認")
+                }
+            }
+        }
+        if (updateCheckMessage != null) {
+            Text(updateCheckMessage, color = MaterialTheme.colorScheme.secondary, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
 private fun DisasterSummaryCard(summary: DisasterSummary) {
     Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, Color(0xFF5A2A2A), MaterialTheme.shapes.medium),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2B1717)),
-        shape = MaterialTheme.shapes.small,
+        shape = MaterialTheme.shapes.medium,
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("重要な気象情報", fontSize = 13.sp, color = Color(0xFFFFB4AB), fontWeight = FontWeight.SemiBold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(
+                    Icons.Filled.WarningAmber,
+                    contentDescription = null,
+                    tint = Color(0xFFFFB4AB),
+                    modifier = Modifier.size(18.dp),
+                )
+                Text("重要な気象情報", fontSize = 13.sp, color = Color(0xFFFFB4AB), fontWeight = FontWeight.SemiBold)
+            }
             summary.typhoons.forEach { typhoon ->
                 Text("台風第${typhoon.number}号 ${typhoon.category}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
@@ -350,43 +480,93 @@ private fun DisasterSummaryCard(summary: DisasterSummary) {
 private fun CurrentSummary(snapshot: WeatherSnapshot) {
     val today = snapshot.today()
     val todayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111217)),
-        shape = MaterialTheme.shapes.small,
+    val isNight = remember(snapshot) { isNightNow(snapshot) }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.large)
+            .background(skyGradient(snapshot.current.weatherCode, isNight))
+            .padding(22.dp),
+        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", fontSize = 88.sp, fontWeight = FontWeight.Bold, letterSpacing = 0.sp)
-                    Text("体感 ${snapshot.current.apparentTemperatureC.temperatureText()}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
-                }
-                Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(weatherIcon(snapshot.current.weatherCode), fontSize = 42.sp, fontWeight = FontWeight.Bold)
-                    Text(weatherLabel(snapshot.current.weatherCode), fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
-                    Text("現在 ${snapshot.current.precipitationMm?.oneDecimal() ?: "--"}mm", color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
-                }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(
+                    "${snapshot.current.temperatureC?.roundText() ?: "--"}°",
+                    fontSize = 92.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = (-2).sp,
+                    color = Color.White,
+                )
+                Text(
+                    "体感 ${snapshot.current.apparentTemperatureC.temperatureText()}",
+                    color = Color.White.copy(alpha = 0.78f),
+                    fontSize = 14.sp,
+                )
             }
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                MetricTile("最高", "${today?.maxTemperatureC?.roundText() ?: "--"}°", Modifier.weight(1f))
-                MetricTile("最低", "${today?.minTemperatureC?.roundText() ?: "--"}°", Modifier.weight(1f))
-                MetricTile("降水", today.effectiveMaxProbability(todayHours).percentText(), Modifier.weight(1f))
-                MetricTile("雨量", today.effectivePrecipitationSum(todayHours).mmText(), Modifier.weight(1f))
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(weatherIcon(snapshot.current.weatherCode), fontSize = 56.sp)
+                Text(weatherLabel(snapshot.current.weatherCode), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                Text(
+                    "現在 ${snapshot.current.precipitationMm?.oneDecimal() ?: "--"}mm",
+                    color = Color.White.copy(alpha = 0.78f),
+                    fontSize = 13.sp,
+                )
             }
-            HorizontalDivider(color = Color(0xFF303036))
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    DetailMetric("体感", snapshot.current.apparentTemperatureC.temperatureText(), Modifier.weight(1f))
-                    DetailMetric("湿度", snapshot.current.humidityPercent.percentText(), Modifier.weight(1f))
-                    DetailMetric("風", windText(snapshot.current.windSpeedKmh, snapshot.current.windDirectionDeg), Modifier.weight(1f))
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                    DetailMetric("気圧", snapshot.current.pressureHpa.pressureText(), Modifier.weight(1f))
-                    DetailMetric("UV", today?.uvIndexMax.uvText(), Modifier.weight(1f))
-                    DetailMetric("日の出/入", "${formatTimeOnly(today?.sunrise)} / ${formatTimeOnly(today?.sunset)}", Modifier.weight(1f))
-                }
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            HeroMetricTile("最高", "${today?.maxTemperatureC?.roundText() ?: "--"}°", Modifier.weight(1f))
+            HeroMetricTile("最低", "${today?.minTemperatureC?.roundText() ?: "--"}°", Modifier.weight(1f))
+            HeroMetricTile("降水", today.effectiveMaxProbability(todayHours).percentText(), Modifier.weight(1f))
+            HeroMetricTile("雨量", today.effectivePrecipitationSum(todayHours).mmText(), Modifier.weight(1f))
+        }
+        HorizontalDivider(color = Color.White.copy(alpha = 0.16f))
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                HeroDetailMetric("体感", snapshot.current.apparentTemperatureC.temperatureText(), Modifier.weight(1f))
+                HeroDetailMetric("湿度", snapshot.current.humidityPercent.percentText(), Modifier.weight(1f))
+                HeroDetailMetric("風", windText(snapshot.current.windSpeedKmh, snapshot.current.windDirectionDeg), Modifier.weight(1f))
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                HeroDetailMetric("気圧", snapshot.current.pressureHpa.pressureText(), Modifier.weight(1f))
+                HeroDetailMetric("UV", today?.uvIndexMax.uvText(), Modifier.weight(1f))
+                HeroDetailMetric("日の出/入", "${formatTimeOnly(today?.sunrise)} / ${formatTimeOnly(today?.sunset)}", Modifier.weight(1f))
             }
         }
     }
+}
+
+@Composable
+private fun HeroMetricTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.14f))
+            .padding(vertical = 11.dp, horizontal = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text(label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.72f))
+    }
+}
+
+@Composable
+private fun HeroDetailMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.68f))
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+    }
+}
+
+private fun isNightNow(snapshot: WeatherSnapshot): Boolean {
+    val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo"))
+    val today = snapshot.today()
+    val sunrise = today?.sunrise?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+    val sunset = today?.sunset?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
+    if (sunrise != null && sunset != null) {
+        return now.isBefore(sunrise) || now.isAfter(sunset)
+    }
+    return now.hour < 6 || now.hour >= 18
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -425,10 +605,7 @@ private fun AdviceCard(item: DailyAdvice, modifier: Modifier = Modifier) {
 
 @Composable
 private fun AirQualityCard(airQuality: AirQuality?) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF181A20)),
-        shape = MaterialTheme.shapes.small,
-    ) {
+    SectionCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -436,7 +613,15 @@ private fun AirQualityCard(airQuality: AirQuality?) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Column {
-                    Text("空気質", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Icon(
+                            Icons.Outlined.Air,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(15.dp),
+                        )
+                        Text("空気質", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                    }
                     Text(aqiLabel(airQuality?.europeanAqi), fontSize = 22.sp, fontWeight = FontWeight.Bold)
                 }
                 Column(horizontalAlignment = Alignment.End) {
@@ -465,12 +650,17 @@ private fun AirQualityCard(airQuality: AirQuality?) {
 
 @Composable
 private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF181A20)),
-        shape = MaterialTheme.shapes.small,
-    ) {
+    SectionCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("雨の見通し", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                Icon(
+                    Icons.Outlined.WaterDrop,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.secondary,
+                    modifier = Modifier.size(15.dp),
+                )
+                Text("雨の見通し", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            }
             Text(nextRainText(snapshot), fontSize = 23.sp, fontWeight = FontWeight.SemiBold)
             val peak = next48Hours.maxByOrNull { it.precipitationProbability ?: -1 }
             Text(
@@ -492,7 +682,7 @@ private fun NowcastRainSection(minutes: List<MinutelyWeather>) {
         SectionHeader("直近3時間", "15分ごとの雨")
         if (minutes.isEmpty()) {
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF181A20)),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A2030)),
                 shape = MaterialTheme.shapes.small,
             ) {
                 Text(
@@ -516,7 +706,7 @@ private fun MinutelyRainCard(minute: MinutelyWeather) {
     val active = probability >= 30 || rain >= 0.1
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (active) Color(0xFF20313A) else Color(0xFF191B21),
+            containerColor = if (active) Color(0xFF1B3346) else Color(0xFF171D2A),
         ),
         shape = MaterialTheme.shapes.small,
     ) {
@@ -534,7 +724,7 @@ private fun MinutelyRainCard(minute: MinutelyWeather) {
             Canvas(Modifier.fillMaxWidth().height(28.dp)) {
                 val trackTop = size.height - 6f
                 drawRoundRect(
-                    color = Color(0xFF35363B),
+                    color = Color(0xFF2C3447),
                     topLeft = Offset(0f, trackTop),
                     size = Size(size.width, 6f),
                     cornerRadius = CornerRadius(6f, 6f),
@@ -577,7 +767,7 @@ private fun MiniHourlyGraph(hours: List<HourlyWeather>) {
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val mutedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)
-    val gridColor = Color(0xFF303036)
+    val gridColor = Color(0xFF2C3447)
 
     Canvas(
         Modifier
@@ -652,7 +842,7 @@ private fun HourCompactCard(hour: HourlyWeather) {
     val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = if (probability == 0) 0.14f else 0.75f)
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (probability > 0) Color(0xFF20313A) else Color(0xFF191B21),
+            containerColor = if (probability > 0) Color(0xFF1B3346) else Color(0xFF171D2A),
         ),
         shape = MaterialTheme.shapes.small,
     ) {
@@ -670,7 +860,7 @@ private fun HourCompactCard(hour: HourlyWeather) {
             Canvas(Modifier.fillMaxWidth().height(34.dp)) {
                 val trackTop = size.height - 8f
                 drawRoundRect(
-                    color = Color(0xFF35363B),
+                    color = Color(0xFF2C3447),
                     topLeft = Offset(0f, trackTop),
                     size = Size(size.width, 7f),
                     cornerRadius = CornerRadius(6f, 6f),
@@ -713,7 +903,7 @@ fun WeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, onClick: () -> U
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF17191F)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF161B27)),
         shape = MaterialTheme.shapes.small,
     ) {
         Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -746,7 +936,7 @@ private fun PeriodChip(summary: DayPeriodSummary, modifier: Modifier = Modifier)
     val signal = rainSignal(summary.maxProbability, summary.precipitationSum)
     Column(
         modifier
-            .background(Color(0xFF101116), MaterialTheme.shapes.small)
+            .background(Color(0xFF10141F), MaterialTheme.shapes.small)
             .padding(9.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -778,7 +968,7 @@ private fun RainRiskBar(probability: Int?, precipitation: Double?) {
     val risk = rainRiskScore(probability, precipitation)
     Canvas(Modifier.fillMaxWidth().height(8.dp)) {
         drawRoundRect(
-            color = Color(0xFF2A2D35),
+            color = Color(0xFF2C3447),
             size = Size(size.width, size.height),
             cornerRadius = CornerRadius(10f, 10f),
         )
@@ -941,30 +1131,32 @@ private fun LocationRow(
 @Composable
 private fun SectionHeader(title: String, subtitle: String) {
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Bottom) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Box(
+                Modifier
+                    .size(width = 4.dp, height = 18.dp)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.primary),
+            )
+            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
         Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
     }
 }
 
 @Composable
-private fun MetricTile(label: String, value: String, modifier: Modifier = Modifier) {
+private fun SectionCard(
+    containerColor: Color = WeatherPalette.SurfaceElevated,
+    content: @Composable () -> Unit,
+) {
     Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1C22)),
-        shape = MaterialTheme.shapes.small,
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, WeatherPalette.Outline.copy(alpha = 0.6f), MaterialTheme.shapes.medium),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
+        shape = MaterialTheme.shapes.medium,
     ) {
-        Column(Modifier.padding(vertical = 10.dp, horizontal = 8.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(value, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun DetailMetric(label: String, value: String, modifier: Modifier = Modifier) {
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        content()
     }
 }
 
