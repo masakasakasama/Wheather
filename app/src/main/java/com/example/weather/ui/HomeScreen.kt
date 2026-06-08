@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -92,6 +93,8 @@ import java.time.LocalDate
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -712,103 +715,136 @@ private fun MinutelyRainCard(minute: MinutelyWeather) {
     ) {
         Column(
             Modifier
-                .width(76.dp)
-                .padding(10.dp),
+                .width(72.dp)
+                .padding(vertical = 12.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(5.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Text(formatMinuteLabel(minute.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-            Text(weatherIcon(minute.weatherCode), fontSize = 16.sp, fontWeight = FontWeight.Bold)
-            Text(rainShortLabel(minute.precipitationProbability, minute.precipitationMm), color = rainColor(minute.precipitationProbability, minute.precipitationMm), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Text(minute.precipitationProbability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-            Canvas(Modifier.fillMaxWidth().height(28.dp)) {
-                val trackTop = size.height - 6f
-                drawRoundRect(
-                    color = Color(0xFF2C3447),
-                    topLeft = Offset(0f, trackTop),
-                    size = Size(size.width, 6f),
-                    cornerRadius = CornerRadius(6f, 6f),
-                )
-                val barHeight = (size.height - 2f) * probability / 100f
-                if (probability > 0) {
-                    drawRoundRect(
-                        color = Color(0xFF64D2FF),
-                        topLeft = Offset(size.width * 0.24f, trackTop - barHeight),
-                        size = Size(size.width * 0.52f, barHeight),
-                        cornerRadius = CornerRadius(7f, 7f),
-                    )
-                }
-            }
+            Text(weatherIcon(minute.weatherCode), fontSize = 20.sp)
+            Text(probability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            ProbabilityBar(probability)
             Text(minute.precipitationMm.mmText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+        }
+    }
+}
+
+/**
+ * A slim horizontal bar where the FILLED WIDTH equals the chance of rain.
+ * Width (left→right) is far more intuitive than encoding probability as a
+ * block's height, which several users found confusing.
+ */
+@Composable
+fun ProbabilityBar(probability: Int, modifier: Modifier = Modifier) {
+    val fraction = (probability.coerceIn(0, 100)) / 100f
+    Box(
+        modifier
+            .fillMaxWidth()
+            .height(5.dp)
+            .clip(RoundedCornerShape(3.dp))
+            .background(Color(0xFF2C3447)),
+    ) {
+        if (probability > 0) {
+            Box(
+                Modifier
+                    .fillMaxWidth(fraction)
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(MaterialTheme.colorScheme.secondary),
+            )
         }
     }
 }
 
 @Composable
 private fun HomeHourlySection(hours: List<HourlyWeather>) {
+    val grouped = remember(hours) { groupHoursByDate(hours) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("今後48時間", "1時間ごとの気温・降水")
-        val scrollState = rememberScrollState()
-        Column(Modifier.horizontalScroll(scrollState), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            MiniHourlyGraph(hours)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                hours.forEach { hour -> HourCompactCard(hour) }
+        SectionHeader("時間ごとの予報", "気温は折れ線・水色バーは降水確率")
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(18.dp),
+        ) {
+            grouped.forEach { (date, dayHours) ->
+                HourlyDayGroup(date = date, dayHours = dayHours)
             }
         }
     }
 }
 
+/** A single day's worth of hourly cells, headed by a 今日/明日/明後日 badge. */
 @Composable
-private fun MiniHourlyGraph(hours: List<HourlyWeather>) {
+private fun HourlyDayGroup(date: LocalDate, dayHours: List<HourlyWeather>) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        DayBadge(date)
+        MiniHourlyGraph(dayHours)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            dayHours.forEach { hour -> HourCompactCard(hour) }
+        }
+    }
+}
+
+@Composable
+fun DayBadge(date: LocalDate) {
+    val today = LocalDate.now(ZoneId.of("Asia/Tokyo"))
+    val offset = ChronoUnit.DAYS.between(today, date)
+    val relative = when (offset) {
+        0L -> "今日"
+        1L -> "明日"
+        2L -> "明後日"
+        else -> null
+    }
+    val accent = when (offset) {
+        0L -> MaterialTheme.colorScheme.primary
+        1L -> MaterialTheme.colorScheme.secondary
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    val dateText = date.format(DateTimeFormatter.ofPattern("M/d(E)", Locale.JAPANESE))
+    Row(
+        Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(accent.copy(alpha = 0.16f))
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        if (relative != null) {
+            Text(relative, color = accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        }
+        Text(dateText, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+fun MiniHourlyGraph(hours: List<HourlyWeather>) {
     val temps = hours.mapNotNull { it.temperatureC }
     val minTemp = temps.minOrNull() ?: 0.0
     val maxTemp = temps.maxOrNull() ?: 1.0
     val lineColor = MaterialTheme.colorScheme.primary
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
-    val mutedTextColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
-    val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.45f)
-    val gridColor = Color(0xFF2C3447)
 
+    // Card pitch below is 64dp width + 8dp gap = 72dp; match it so dots line up.
     Canvas(
         Modifier
-            .width((hours.size.coerceAtLeast(1) * 92).dp)
-            .height(156.dp),
+            .width((hours.size.coerceAtLeast(1) * 72).dp)
+            .height(96.dp),
     ) {
         if (hours.isEmpty()) return@Canvas
         val topPad = 26f
-        val bottomPad = 32f
+        val bottomPad = 12f
         val graphHeight = size.height - topPad - bottomPad
         val columnWidth = size.width / hours.size.coerceAtLeast(1)
         val tempPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = textColor
-            textSize = 24f
+            textSize = 26f
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = mutedTextColor
-            textSize = 18f
-            textAlign = Paint.Align.CENTER
-        }
-        repeat(4) { index ->
-            val y = topPad + graphHeight * index / 3f
-            drawLine(gridColor, Offset(0f, y), Offset(size.width, y), strokeWidth = 1f)
-        }
-        hours.forEachIndexed { index, hour ->
-            val probability = (hour.precipitationProbability ?: 0).coerceIn(0, 100)
-            val barHeight = graphHeight * 0.42f * probability / 100f
-            drawRoundRect(
-                color = barColor,
-                topLeft = Offset(index * columnWidth + columnWidth * 0.3f, topPad + graphHeight - barHeight),
-                size = Size(columnWidth * 0.4f, barHeight),
-                cornerRadius = CornerRadius(8f, 8f),
-            )
         }
         val points = hours.mapIndexedNotNull { index, hour ->
             val temp = hour.temperatureC ?: return@mapIndexedNotNull null
             val range = (maxTemp - minTemp).takeIf { it > 0.1 } ?: 1.0
             val x = index * columnWidth + columnWidth / 2f
-            val y = topPad + graphHeight * 0.12f + graphHeight * 0.56f * (1f - ((temp - minTemp) / range).toFloat())
+            val y = topPad + graphHeight * 0.1f + graphHeight * 0.8f * (1f - ((temp - minTemp) / range).toFloat())
             IndexedPoint(index, Offset(x, y), temp)
         }
         points.zipWithNext().forEach { (a, b) ->
@@ -819,13 +855,9 @@ private fun MiniHourlyGraph(hours: List<HourlyWeather>) {
             drawContext.canvas.nativeCanvas.drawText(
                 "${point.temperature.roundText()}°",
                 point.offset.x,
-                (point.offset.y - 12f).coerceAtLeast(22f),
+                (point.offset.y - 14f).coerceAtLeast(22f),
                 tempPaint,
             )
-        }
-        hours.forEachIndexed { index, hour ->
-            val x = index * columnWidth + columnWidth / 2f
-            drawContext.canvas.nativeCanvas.drawText(formatHourLabel(hour.time), x, size.height - 8f, timePaint)
         }
     }
 }
@@ -837,48 +869,60 @@ private data class IndexedPoint(
 )
 
 @Composable
-private fun HourCompactCard(hour: HourlyWeather) {
+fun HourCompactCard(hour: HourlyWeather) {
     val probability = (hour.precipitationProbability ?: 0).coerceIn(0, 100)
-    val barColor = MaterialTheme.colorScheme.secondary.copy(alpha = if (probability == 0) 0.14f else 0.75f)
+    val isNow = remember(hour.time) { isCurrentHour(hour.time) }
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (probability > 0) Color(0xFF1B3346) else Color(0xFF171D2A),
         ),
         shape = MaterialTheme.shapes.small,
+        modifier = if (isNow) {
+            Modifier.border(1.5.dp, MaterialTheme.colorScheme.primary, MaterialTheme.shapes.small)
+        } else {
+            Modifier
+        },
     ) {
         Column(
             Modifier
-                .width(82.dp)
-                .padding(10.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+                .width(64.dp)
+                .padding(vertical = 12.dp, horizontal = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(formatDateHourLabel(hour.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-            Text(weatherIcon(hour.weatherCode), fontSize = 17.sp, fontWeight = FontWeight.Bold)
-            Text(rainShortLabel(hour.precipitationProbability, hour.precipitationMm), color = rainColor(hour.precipitationProbability, hour.precipitationMm), fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-            Text("${hour.temperatureC?.roundText() ?: "--"}°", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            Canvas(Modifier.fillMaxWidth().height(34.dp)) {
-                val trackTop = size.height - 8f
-                drawRoundRect(
-                    color = Color(0xFF2C3447),
-                    topLeft = Offset(0f, trackTop),
-                    size = Size(size.width, 7f),
-                    cornerRadius = CornerRadius(6f, 6f),
-                )
-                val barHeight = (size.height - 2f) * probability / 100f
-                if (probability > 0) {
-                    drawRoundRect(
-                        color = barColor,
-                        topLeft = Offset(size.width * 0.22f, trackTop - barHeight),
-                        size = Size(size.width * 0.56f, barHeight),
-                        cornerRadius = CornerRadius(7f, 7f),
-                    )
-                }
-            }
-            Text(hour.precipitationProbability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp)
-            Text(hour.precipitationMm.mmText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
+            Text(
+                if (isNow) "今" else formatHourOnly(hour.time),
+                color = if (isNow) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 12.sp,
+                fontWeight = if (isNow) FontWeight.Bold else FontWeight.Normal,
+            )
+            Text(weatherIcon(hour.weatherCode), fontSize = 20.sp)
+            Text("${hour.temperatureC?.roundText() ?: "--"}°", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(probability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            ProbabilityBar(probability)
+            Text(hour.precipitationMm.mmText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 10.sp)
         }
     }
+}
+
+/** Groups a flat hourly list into ordered (date, hours) buckets for day-by-day display. */
+fun groupHoursByDate(hours: List<HourlyWeather>): List<Pair<LocalDate, List<HourlyWeather>>> {
+    return hours
+        .mapNotNull { hour -> runCatching { LocalDateTime.parse(hour.time).toLocalDate() }.getOrNull()?.let { it to hour } }
+        .groupBy({ it.first }, { it.second })
+        .toList()
+        .sortedBy { it.first }
+}
+
+fun formatHourOnly(time: String): String {
+    val hour = runCatching { LocalDateTime.parse(time).hour }.getOrNull() ?: return "--"
+    return "${hour}時"
+}
+
+private fun isCurrentHour(time: String): Boolean {
+    val parsed = runCatching { LocalDateTime.parse(time) }.getOrNull() ?: return false
+    val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo"))
+    return parsed.toLocalDate() == now.toLocalDate() && parsed.hour == now.hour
 }
 
 @Composable
@@ -1476,19 +1520,6 @@ fun rainSignal(probability: Int?, precipitationMm: Double?): RainSignal {
             detail = "急な雨だけ注意",
             color = Color(0xFFC7C7CC),
         )
-    }
-}
-
-fun rainShortLabel(probability: Int?, precipitationMm: Double?): String {
-    val probabilityValue = probability ?: 0
-    val rain = precipitationMm ?: 0.0
-    return when {
-        rain >= 100.0 -> "災害級"
-        rain >= 50.0 -> "大雨"
-        rain >= 10.0 -> "強雨"
-        rain >= 1.0 || probabilityValue >= 70 -> "雨具"
-        probabilityValue >= 40 -> "微妙"
-        else -> "安心"
     }
 }
 
