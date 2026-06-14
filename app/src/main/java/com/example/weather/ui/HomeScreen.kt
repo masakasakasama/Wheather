@@ -805,26 +805,24 @@ fun ProbabilityBar(probability: Int, modifier: Modifier = Modifier) {
 private fun HomeHourlySection(hours: List<HourlyWeather>) {
     val grouped = remember(hours) { groupHoursByDate(hours) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("時間ごとの予報", "気温は折れ線・水色バーは降水確率")
+        SectionHeader("時間ごとの予報", "降水確率・雨量・気温を同じ時刻で確認")
         Row(
             Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             grouped.forEach { (date, dayHours) ->
-                HourlyDayGroup(date = date, dayHours = dayHours)
+                HourlyDayTimeline(date = date, dayHours = dayHours)
             }
         }
     }
 }
 
-/** A single day's worth of hourly cells, headed by a 今日/明日/明後日 badge. */
 @Composable
-private fun HourlyDayGroup(date: LocalDate, dayHours: List<HourlyWeather>) {
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+fun HourlyDayTimeline(date: LocalDate, dayHours: List<HourlyWeather>) {
+    SectionCard(containerColor = Color(0xFF202124)) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         DayBadge(date)
-        MiniHourlyGraph(dayHours)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            dayHours.forEach { hour -> HourCompactCard(hour) }
+            HourlyRainTimeline(dayHours)
         }
     }
 }
@@ -861,47 +859,143 @@ fun DayBadge(date: LocalDate) {
 }
 
 @Composable
-fun MiniHourlyGraph(hours: List<HourlyWeather>) {
+fun HourlyRainTimeline(hours: List<HourlyWeather>) {
     val temps = hours.mapNotNull { it.temperatureC }
     val minTemp = temps.minOrNull() ?: 0.0
     val maxTemp = temps.maxOrNull() ?: 1.0
-    val lineColor = MaterialTheme.colorScheme.primary
+    val tempColor = Color(0xFFFF7A1A)
+    val lowTempColor = Color(0xFF5BA7FF)
+    val rainColor = MaterialTheme.colorScheme.secondary
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
+    val mutedColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
+    val gridColor = Color(0xFF3A3A3E)
+    val now = remember { LocalDateTime.now(ZoneId.of("Asia/Tokyo")) }
+    val maxRain = hours.mapNotNull { it.precipitationMm }.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
 
-    // Card pitch below is 92dp width + 8dp gap = 100dp; match it so dots line up.
     Canvas(
         Modifier
-            .width((hours.size.coerceAtLeast(1) * 100).dp)
-            .height(96.dp),
+            .width((hours.size.coerceAtLeast(1) * 62).dp)
+            .height(238.dp),
     ) {
         if (hours.isEmpty()) return@Canvas
-        val topPad = 26f
-        val bottomPad = 12f
-        val graphHeight = size.height - topPad - bottomPad
+        val topY = 22f
+        val iconY = 58f
+        val tempGraphTop = 82f
+        val tempGraphBottom = 138f
+        val probabilityY = 166f
+        val amountBarBase = 204f
+        val amountTextY = 226f
+        val graphHeight = tempGraphBottom - tempGraphTop
         val columnWidth = size.width / hours.size.coerceAtLeast(1)
-        val tempPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = mutedColor
+            textSize = 20f
+            textAlign = Paint.Align.CENTER
+        }
+        val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = textColor
-            textSize = 26f
+            textSize = 25f
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
+        val tempPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = tempColor.toArgb()
+            textSize = 20f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val lowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = lowTempColor.toArgb()
+            textSize = 20f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val rainPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = rainColor.toArgb()
+            textSize = 20f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val amountPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color(0xFF202124).toArgb()
+            textSize = 18f
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+        }
+        val amountSmallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = mutedColor
+            textSize = 17f
+            textAlign = Paint.Align.CENTER
+        }
+
+        drawLine(gridColor, Offset(0f, 72f), Offset(size.width, 72f), strokeWidth = 1f)
+        drawLine(gridColor, Offset(0f, probabilityY + 10f), Offset(size.width, probabilityY + 10f), strokeWidth = 1f)
+
+        hours.forEachIndexed { index, hour ->
+            val parsed = runCatching { LocalDateTime.parse(hour.time) }.getOrNull()
+            val isNow = parsed?.let { it.toLocalDate() == now.toLocalDate() && it.hour == now.hour } == true
+            val x = index * columnWidth + columnWidth / 2f
+            if (isNow) {
+                drawRoundRect(
+                    color = rainColor.copy(alpha = 0.14f),
+                    topLeft = Offset(index * columnWidth + 3f, 0f),
+                    size = Size(columnWidth - 6f, size.height),
+                    cornerRadius = CornerRadius(10f, 10f),
+                )
+            }
+            drawContext.canvas.nativeCanvas.drawText(
+                if (isNow) "今" else formatHourOnly(hour.time),
+                x,
+                topY,
+                timePaint,
+            )
+            drawContext.canvas.nativeCanvas.drawText(weatherIcon(hour.weatherCode), x, iconY, iconPaint)
+        }
+
         val points = hours.mapIndexedNotNull { index, hour ->
             val temp = hour.temperatureC ?: return@mapIndexedNotNull null
             val range = (maxTemp - minTemp).takeIf { it > 0.1 } ?: 1.0
             val x = index * columnWidth + columnWidth / 2f
-            val y = topPad + graphHeight * 0.1f + graphHeight * 0.8f * (1f - ((temp - minTemp) / range).toFloat())
+            val y = tempGraphTop + graphHeight * (1f - ((temp - minTemp) / range).toFloat())
             IndexedPoint(index, Offset(x, y), temp)
         }
         points.zipWithNext().forEach { (a, b) ->
-            drawLine(lineColor, a.offset, b.offset, strokeWidth = 5f, cap = StrokeCap.Round)
+            drawLine(tempColor, a.offset, b.offset, strokeWidth = 4f, cap = StrokeCap.Round)
         }
         points.forEach { point ->
-            drawCircle(lineColor, radius = 5f, center = point.offset)
+            drawCircle(tempColor, radius = 4f, center = point.offset)
             drawContext.canvas.nativeCanvas.drawText(
-                "${point.temperature.roundText()}°",
+                point.temperature.roundText(),
                 point.offset.x,
-                (point.offset.y - 14f).coerceAtLeast(22f),
+                (point.offset.y + 24f).coerceAtMost(tempGraphBottom + 22f),
                 tempPaint,
+            )
+        }
+
+        hours.forEachIndexed { index, hour ->
+            val x = index * columnWidth + columnWidth / 2f
+            val probability = hour.precipitationProbability ?: 0
+            val amount = hour.precipitationMm ?: 0.0
+            drawContext.canvas.nativeCanvas.drawText("${probability}%", x, probabilityY, rainPaint)
+
+            val barHeight = (amount / maxRain).toFloat().coerceIn(0f, 1f) * 28f
+            drawRoundRect(
+                color = Color.White.copy(alpha = 0.95f),
+                topLeft = Offset(x - 17f, amountBarBase - 18f - barHeight),
+                size = Size(34f, 18f + barHeight),
+                cornerRadius = CornerRadius(2f, 2f),
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                if (amount >= 10.0) amount.oneDecimal() else amount.roundText(),
+                x,
+                amountBarBase - 5f,
+                amountPaint,
+            )
+            drawContext.canvas.nativeCanvas.drawText(
+                "${hour.precipitationMm.mmText()}",
+                x,
+                amountTextY,
+                amountSmallPaint,
             )
         }
     }
@@ -975,10 +1069,16 @@ private fun isCurrentHour(time: String): Boolean {
 @Composable
 private fun HomeWeeklySection(days: List<DailyWeather>, hourly: List<HourlyWeather>, onDayClick: (DailyWeather) -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("2週間", "AM / PMの概況")
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            days.forEach { day ->
-                WeeklyRow(day = day, dayHours = hourly.forDate(day.date), onClick = { onDayClick(day) })
+        SectionHeader("2週間天気", "日付・天気・気温・降水を一覧")
+        WeeklyTodayTomorrowStrip(days, hourly)
+        SectionCard(containerColor = Color(0xFF202124)) {
+            Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                days.forEachIndexed { index, day ->
+                    CompactWeeklyRow(day = day, dayHours = hourly.forDate(day.date), onClick = { onDayClick(day) })
+                    if (index != days.lastIndex) {
+                        HorizontalDivider(color = Color(0xFF383A3E))
+                    }
+                }
             }
         }
     }
@@ -986,37 +1086,88 @@ private fun HomeWeeklySection(days: List<DailyWeather>, hourly: List<HourlyWeath
 
 @Composable
 fun WeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, onClick: () -> Unit) {
+    CompactWeeklyRow(day = day, dayHours = dayHours, onClick = onClick)
+}
+
+@Composable
+private fun CompactWeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, onClick: () -> Unit) {
     val parts = dayPeriodSummaries(dayHours)
     val maxProbability = day.effectiveMaxProbability(dayHours)
     val precipitationSum = day.effectivePrecipitationSum(dayHours)
     val signal = rainSignal(maxProbability, precipitationSum)
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF161B27)),
-        shape = MaterialTheme.shapes.small,
+            .clickable(onClick = onClick)
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column {
-                    Text(formatDateShort(day.date), fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
-                    Text(signal.action, fontSize = 11.sp, color = signal.color, fontWeight = FontWeight.SemiBold)
-                }
-                Text(weatherIcon(day.weatherCode), fontSize = 20.sp, fontWeight = FontWeight.Bold)
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("${day.maxTemperatureC?.roundText() ?: "--"}° / ${day.minTemperatureC?.roundText() ?: "--"}°", fontSize = 21.sp, fontWeight = FontWeight.Bold)
-                    Text(weatherLabel(day.weatherCode), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.width(86.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(formatDateWithWeekday(day.date), fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(signal.action, fontSize = 11.sp, color = signal.color, fontWeight = FontWeight.SemiBold)
+        }
+        Text(
+            weatherIcon(day.weatherCode),
+            modifier = Modifier.width(58.dp),
+            fontSize = 28.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                Text("${day.maxTemperatureC?.roundText() ?: "--"}", color = Color(0xFFFF7A1A), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Text("${day.minTemperatureC?.roundText() ?: "--"}", color = Color(0xFF5BA7FF), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Icon(
+                        Icons.Outlined.WaterDrop,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(15.dp),
+                    )
+                    Text(maxProbability.percentText(), color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
                 }
             }
-            RainImpactRow(signal = signal, probability = maxProbability, precipitation = precipitationSum)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                PeriodChip(parts.first, Modifier.weight(1f))
-                PeriodChip(parts.second, Modifier.weight(1f))
+            Text(
+                "${weatherLabel(day.weatherCode)} / ${precipitationSum.mmText()} / AM ${parts.first.maxProbability.percentText()} PM ${parts.second.maxProbability.percentText()}",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 11.sp,
+            )
+        }
+        Text("+", color = MaterialTheme.colorScheme.secondary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
+@Composable
+private fun WeeklyTodayTomorrowStrip(days: List<DailyWeather>, hourly: List<HourlyWeather>) {
+    if (days.isEmpty()) return
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF252525))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        days.take(2).forEachIndexed { index, day ->
+            val dayHours = hourly.forDate(day.date)
+            val signal = rainSignal(day.effectiveMaxProbability(dayHours), day.effectivePrecipitationSum(dayHours))
+            Column(
+                Modifier.weight(1f),
+                horizontalAlignment = if (index == 0) Alignment.Start else Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                Text(if (index == 0) "今日 ${formatDateWithWeekday(day.date)}" else "明日 ${formatDateWithWeekday(day.date)}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+                Text("${weatherIcon(day.weatherCode)} ${weatherLabel(day.weatherCode)}", fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                Text("${day.maxTemperatureC?.roundText() ?: "--"}° / ${day.minTemperatureC?.roundText() ?: "--"}°  ${signal.action}", color = signal.color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+            }
+            if (index == 0 && days.size > 1) {
+                Box(
+                    Modifier
+                        .width(1.dp)
+                        .height(54.dp)
+                        .background(Color(0xFF3A3A3E)),
+                )
             }
         }
     }
@@ -1344,6 +1495,11 @@ fun formatTimeOnly(time: String?): String {
 fun formatDateShort(date: String): String {
     val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
     return parsed?.format(DateTimeFormatter.ofPattern("M/d")) ?: date
+}
+
+fun formatDateWithWeekday(date: String): String {
+    val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
+    return parsed?.format(DateTimeFormatter.ofPattern("MM/dd(E)", Locale.JAPANESE)) ?: date
 }
 
 fun formatDateLong(date: String): String {

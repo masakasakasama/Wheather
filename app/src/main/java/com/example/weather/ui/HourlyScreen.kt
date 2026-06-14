@@ -1,9 +1,7 @@
 package com.example.weather.ui
 
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -45,20 +43,7 @@ fun HourlyScreen(snapshot: WeatherSnapshot?) {
             verticalArrangement = Arrangement.spacedBy(22.dp),
         ) {
             grouped.forEach { (date, dayHours) ->
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    DayBadge(date)
-                    Row(
-                        Modifier.horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            MiniHourlyGraph(dayHours)
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                dayHours.forEach { hour -> HourCompactCard(hour) }
-                            }
-                        }
-                    }
-                }
+                HourlyDayTimeline(date = date, dayHours = dayHours)
             }
         }
     }
