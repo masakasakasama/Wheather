@@ -483,6 +483,10 @@ private fun DisasterSummaryCard(summary: DisasterSummary) {
 private fun CurrentSummary(snapshot: WeatherSnapshot) {
     val today = snapshot.today()
     val todayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
+    val next48Hours = snapshot.hourly.nextHours(48)
+    val rainSignal = rainSignal(today.effectiveMaxProbability(todayHours), today.effectivePrecipitationSum(todayHours))
+    val comfort = comfortSignal(snapshot, today, next48Hours)
+    val trend = temperatureTrendLabel(next48Hours)
     val isNight = remember(snapshot) { isNightNow(snapshot) }
     Column(
         Modifier
@@ -517,11 +521,16 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
                 )
             }
         }
+        HeroJudgmentCard(rainSignal = rainSignal, comfort = comfort)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             HeroMetricTile("最高", "${today?.maxTemperatureC?.roundText() ?: "--"}°", Modifier.weight(1f))
             HeroMetricTile("最低", "${today?.minTemperatureC?.roundText() ?: "--"}°", Modifier.weight(1f))
             HeroMetricTile("降水", today.effectiveMaxProbability(todayHours).percentText(), Modifier.weight(1f))
             HeroMetricTile("雨量", today.effectivePrecipitationSum(todayHours).mmText(), Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            HeroInsightTile("次の雨", nextRainShortText(snapshot), Modifier.weight(1f))
+            HeroInsightTile("気温", trend, Modifier.weight(1f))
         }
         HorizontalDivider(color = Color.White.copy(alpha = 0.16f))
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -536,6 +545,35 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
                 HeroDetailMetric("日の出/入", "${formatTimeOnly(today?.sunrise)} / ${formatTimeOnly(today?.sunset)}", Modifier.weight(1f))
             }
         }
+    }
+}
+
+@Composable
+private fun HeroJudgmentCard(rainSignal: RainSignal, comfort: ComfortSignal) {
+    Column(
+        Modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(Color.White.copy(alpha = 0.16f))
+            .padding(14.dp),
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Text("今すぐの判断", fontSize = 12.sp, color = Color.White.copy(alpha = 0.72f))
+        Text("${rainSignal.action}・${comfort.action}", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("${rainSignal.label}。${comfort.detail}", fontSize = 13.sp, color = Color.White.copy(alpha = 0.78f))
+    }
+}
+
+@Composable
+private fun HeroInsightTile(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.12f))
+            .padding(vertical = 10.dp, horizontal = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        Text(label, fontSize = 11.sp, color = Color.White.copy(alpha = 0.68f))
+        Text(value, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = Color.White)
     }
 }
 
@@ -653,8 +691,12 @@ private fun AirQualityCard(airQuality: AirQuality?) {
 
 @Composable
 private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>) {
+    val peak = next48Hours.maxByOrNull {
+        maxOf((it.precipitationProbability ?: 0).toDouble(), (it.precipitationMm ?: 0.0) * 80.0)
+    }
+    val signal = rainSignal(peak?.precipitationProbability, peak?.precipitationMm)
     SectionCard {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                 Icon(
                     Icons.Outlined.WaterDrop,
@@ -664,17 +706,18 @@ private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeath
                 )
                 Text("雨の見通し", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
             }
-            Text(nextRainText(snapshot), fontSize = 23.sp, fontWeight = FontWeight.SemiBold)
-            val peak = next48Hours.maxByOrNull { it.precipitationProbability ?: -1 }
-            Text(
-                peak?.let { "48時間以内の最大降水確率 ${it.precipitationProbability.percentText()} (${formatDateHourLabel(it.time)})" }
-                    ?: "48時間以内の降水データなし",
+            Text(signal.label, fontSize = 27.sp, fontWeight = FontWeight.Bold, color = signal.color)
+            Text("${signal.action}。${nextRainText(snapshot)}", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+            RainRiskBar(peak?.precipitationProbability, peak?.precipitationMm)
+            LabelValueRow(
+                label = "48時間のピーク",
+                value = peak?.let { "${formatDateHourLabel(it.time)} ${it.precipitationProbability.percentText()} / ${it.precipitationMm.mmText()}" }
+                    ?: "降水データなし",
                 color = MaterialTheme.colorScheme.secondary,
-                fontSize = 13.sp,
             )
             val today = snapshot.today()
             val todayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
-            Text("今日の予想降水量 ${today.effectivePrecipitationSum(todayHours).mmText()}", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp)
+            LabelValueRow("今日の予想降水量", today.effectivePrecipitationSum(todayHours).mmText(), MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -707,6 +750,7 @@ private fun MinutelyRainCard(minute: MinutelyWeather) {
     val probability = (minute.precipitationProbability ?: 0).coerceIn(0, 100)
     val rain = minute.precipitationMm ?: 0.0
     val active = probability >= 30 || rain >= 0.1
+    val signal = rainSignal(minute.precipitationProbability, minute.precipitationMm)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (active) Color(0xFF1B3346) else Color(0xFF171D2A),
@@ -715,13 +759,14 @@ private fun MinutelyRainCard(minute: MinutelyWeather) {
     ) {
         Column(
             Modifier
-                .width(72.dp)
+                .width(92.dp)
                 .padding(vertical = 12.dp, horizontal = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Text(formatMinuteLabel(minute.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
             Text(weatherIcon(minute.weatherCode), fontSize = 20.sp)
+            Text(signal.action, color = signal.color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text(probability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             ProbabilityBar(probability)
             Text(minute.precipitationMm.mmText(), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
@@ -823,10 +868,10 @@ fun MiniHourlyGraph(hours: List<HourlyWeather>) {
     val lineColor = MaterialTheme.colorScheme.primary
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
 
-    // Card pitch below is 64dp width + 8dp gap = 72dp; match it so dots line up.
+    // Card pitch below is 92dp width + 8dp gap = 100dp; match it so dots line up.
     Canvas(
         Modifier
-            .width((hours.size.coerceAtLeast(1) * 72).dp)
+            .width((hours.size.coerceAtLeast(1) * 100).dp)
             .height(96.dp),
     ) {
         if (hours.isEmpty()) return@Canvas
@@ -872,6 +917,7 @@ private data class IndexedPoint(
 fun HourCompactCard(hour: HourlyWeather) {
     val probability = (hour.precipitationProbability ?: 0).coerceIn(0, 100)
     val isNow = remember(hour.time) { isCurrentHour(hour.time) }
+    val signal = rainSignal(hour.precipitationProbability, hour.precipitationMm)
     Card(
         colors = CardDefaults.cardColors(
             containerColor = if (probability > 0) Color(0xFF1B3346) else Color(0xFF171D2A),
@@ -885,7 +931,7 @@ fun HourCompactCard(hour: HourlyWeather) {
     ) {
         Column(
             Modifier
-                .width(64.dp)
+                .width(92.dp)
                 .padding(vertical = 12.dp, horizontal = 6.dp),
             verticalArrangement = Arrangement.spacedBy(7.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -897,6 +943,7 @@ fun HourCompactCard(hour: HourlyWeather) {
                 fontWeight = if (isNow) FontWeight.Bold else FontWeight.Normal,
             )
             Text(weatherIcon(hour.weatherCode), fontSize = 20.sp)
+            Text(signal.action, color = signal.color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text("${hour.temperatureC?.roundText() ?: "--"}°", fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Text(probability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
             ProbabilityBar(probability)
@@ -985,8 +1032,9 @@ private fun PeriodChip(summary: DayPeriodSummary, modifier: Modifier = Modifier)
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         Text(summary.label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(signal.label, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = signal.color)
-        Text("${weatherIcon(summary.weatherCode)} ${summary.maxTemp?.roundText() ?: "--"}° / ${summary.maxProbability.percentText()} / ${summary.precipitationSum.mmText()}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(signal.action, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = signal.color)
+        Text("${weatherIcon(summary.weatherCode)} ${signal.label}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurface)
+        Text("${summary.maxTemp?.roundText() ?: "--"}° / ${summary.maxProbability.percentText()} / ${summary.precipitationSum.mmText()}", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -1027,20 +1075,24 @@ private fun RainRiskBar(probability: Int?, precipitation: Double?) {
 @Composable
 fun DayDetailDialog(day: DailyWeather, dayHours: List<HourlyWeather>, onDismiss: () -> Unit) {
     val parts = dayPeriodSummaries(dayHours)
+    val maxProbability = day.effectiveMaxProbability(dayHours)
+    val precipitation = day.effectivePrecipitationSum(dayHours)
+    val signal = rainSignal(maxProbability, precipitation)
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(formatDateLong(day.date)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("${weatherIcon(day.weatherCode)} ${weatherLabel(day.weatherCode)}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("最高気温: ${day.maxTemperatureC?.roundText() ?: "--"}°")
-                Text("最低気温: ${day.minTemperatureC?.roundText() ?: "--"}°")
-                Text("最大降水確率: ${day.effectiveMaxProbability(dayHours).percentText()}")
-                Text("予想降水量: ${day.effectivePrecipitationSum(dayHours).mmText()}")
-                Text("UV指数: ${day.uvIndexMax.uvText()}")
-                Text("日の出 / 日の入: ${formatTimeOnly(day.sunrise)} / ${formatTimeOnly(day.sunset)}")
-                Text("AM: ${weatherIcon(parts.first.weatherCode)} ${parts.first.maxProbability.percentText()} / ${parts.first.precipitationSum.mmText()}")
-                Text("PM: ${weatherIcon(parts.second.weatherCode)} ${parts.second.maxProbability.percentText()} / ${parts.second.precipitationSum.mmText()}")
+                Text("${signal.action}: ${signal.label}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = signal.color)
+                Text(signal.detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                RainRiskBar(maxProbability, precipitation)
+                LabelValueRow("最高 / 最低", "${day.maxTemperatureC?.roundText() ?: "--"}° / ${day.minTemperatureC?.roundText() ?: "--"}°", MaterialTheme.colorScheme.onSurface)
+                LabelValueRow("最大降水 / 雨量", "${maxProbability.percentText()} / ${precipitation.mmText()}", MaterialTheme.colorScheme.secondary)
+                LabelValueRow("UV指数", day.uvIndexMax.uvText(), MaterialTheme.colorScheme.onSurface)
+                LabelValueRow("日の出 / 日の入", "${formatTimeOnly(day.sunrise)} / ${formatTimeOnly(day.sunset)}", MaterialTheme.colorScheme.onSurface)
+                LabelValueRow("AM", "${rainSignal(parts.first.maxProbability, parts.first.precipitationSum).action}・${weatherIcon(parts.first.weatherCode)} ${parts.first.maxProbability.percentText()} / ${parts.first.precipitationSum.mmText()}", MaterialTheme.colorScheme.onSurface)
+                LabelValueRow("PM", "${rainSignal(parts.second.maxProbability, parts.second.precipitationSum).action}・${weatherIcon(parts.second.weatherCode)} ${parts.second.maxProbability.percentText()} / ${parts.second.precipitationSum.mmText()}", MaterialTheme.colorScheme.onSurface)
             }
         },
         confirmButton = {
@@ -1212,6 +1264,18 @@ private fun AirMetric(label: String, value: String, modifier: Modifier = Modifie
     }
 }
 
+@Composable
+private fun LabelValueRow(label: String, value: String, color: Color) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+        Text(value, color = color, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
 fun nextRainText(snapshot: WeatherSnapshot): String {
     val nextMinute = snapshot.minutely15.nextMinutely15(16).firstOrNull {
         (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) >= 0.1
@@ -1327,6 +1391,11 @@ data class RainSignal(
     val action: String,
     val detail: String,
     val color: Color,
+)
+
+data class ComfortSignal(
+    val action: String,
+    val detail: String,
 )
 
 fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>): List<DailyAdvice> {
@@ -1521,6 +1590,69 @@ fun rainSignal(probability: Int?, precipitationMm: Double?): RainSignal {
             color = Color(0xFFC7C7CC),
         )
     }
+}
+
+fun comfortSignal(snapshot: WeatherSnapshot, today: DailyWeather?, next48Hours: List<HourlyWeather>): ComfortSignal {
+    val maxTemp = today?.maxTemperatureC ?: next48Hours.take(24).mapNotNull { it.temperatureC }.maxOrNull()
+    val minTemp = today?.minTemperatureC ?: next48Hours.take(24).mapNotNull { it.temperatureC }.minOrNull()
+    val apparent = snapshot.current.apparentTemperatureC ?: snapshot.current.temperatureC
+    val humidity = snapshot.current.humidityPercent
+    val wind = snapshot.current.windSpeedKmh
+    return when {
+        (apparent ?: 0.0) >= 33.0 || (maxTemp ?: 0.0) >= 33.0 -> ComfortSignal(
+            action = "暑さ対策",
+            detail = "体感 ${apparent.temperatureText()}。水分と日差し対策を優先",
+        )
+        (maxTemp ?: 0.0) >= 30.0 -> ComfortSignal(
+            action = "薄着でOK",
+            detail = "最高 ${maxTemp.temperatureText()}。日中は暑め",
+        )
+        (minTemp ?: 99.0) <= 10.0 -> ComfortSignal(
+            action = "防寒",
+            detail = "最低 ${minTemp.temperatureText()}。朝晩は冷える",
+        )
+        (minTemp ?: 99.0) <= 16.0 -> ComfortSignal(
+            action = "羽織り",
+            detail = "最低 ${minTemp.temperatureText()}。朝晩だけ冷えやすい",
+        )
+        (wind ?: 0.0) >= 35.0 -> ComfortSignal(
+            action = "風に注意",
+            detail = "風 ${windText(wind, snapshot.current.windDirectionDeg)}。軽い物は飛びやすい",
+        )
+        (humidity ?: 0) >= 80 -> ComfortSignal(
+            action = "蒸れ対策",
+            detail = "湿度 ${humidity.percentText()}。汗が乾きにくい",
+        )
+        else -> ComfortSignal(
+            action = "過ごしやすい",
+            detail = "気温差は大きくなりにくい",
+        )
+    }
+}
+
+fun temperatureTrendLabel(hours: List<HourlyWeather>): String {
+    val first = hours.firstOrNull()?.temperatureC
+    val later = hours.drop(1).take(12).lastOrNull()?.temperatureC ?: hours.lastOrNull()?.temperatureC
+    if (first == null || later == null) return "見通しなし"
+    val diff = later - first
+    return when {
+        diff >= 5.0 -> "上がる ${first.roundText()}°→${later.roundText()}°"
+        diff <= -5.0 -> "下がる ${first.roundText()}°→${later.roundText()}°"
+        diff >= 2.0 -> "少し上がる"
+        diff <= -2.0 -> "少し下がる"
+        else -> "ほぼ横ばい"
+    }
+}
+
+fun nextRainShortText(snapshot: WeatherSnapshot): String {
+    val nextMinute = snapshot.minutely15.nextMinutely15(16).firstOrNull {
+        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) >= 0.1
+    }
+    if (nextMinute != null) return formatDateMinuteLabel(nextMinute.time)
+    val next = snapshot.hourly.nextHours(48).firstOrNull {
+        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) > 0.0
+    }
+    return next?.let { formatDateHourLabel(it.time) } ?: "48h低め"
 }
 
 fun rainColor(probability: Int?, precipitationMm: Double?): Color = rainSignal(probability, precipitationMm).color

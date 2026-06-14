@@ -28,10 +28,10 @@ class JmaDisasterClient(
     suspend fun fetchSummary(location: WeatherLocation): Result<DisasterSummary> = runCatching {
         withContext(Dispatchers.IO) {
             val office = nearestOffice(location)
-            val warnings = fetchWarningSummary(office)
+            val warnings = fetchWarningSummary(office, location)
             val typhoons = fetchTyphoons()
             DisasterSummary(
-                officeName = office.name,
+                officeName = warnings.areaName ?: office.name,
                 warningHeadline = warnings.headline,
                 activeWarnings = warnings.activeWarnings,
                 typhoons = typhoons,
@@ -40,18 +40,21 @@ class JmaDisasterClient(
         }
     }
 
-    private fun fetchWarningSummary(office: JmaOffice): WarningSummary {
+    private fun fetchWarningSummary(office: JmaOffice, location: WeatherLocation): WarningSummary {
+        val localArea = localWarningArea(office, location)
         val request = Request.Builder()
             .url("https://www.jma.go.jp/bosai/warning/data/warning/${office.code}.json")
             .header("User-Agent", "PersonalWeather/1.0")
             .build()
         httpClient.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) return WarningSummary(null, emptyList())
+            if (!response.isSuccessful) return WarningSummary(null, emptyList(), localArea?.name)
             val root = json.parseToJsonElement(response.body?.string().orEmpty()).jsonObject
             val headline = root["headlineText"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
             val warningNames = mutableSetOf<String>()
             root["areaTypes"]?.jsonArray.orEmpty().forEach { areaType ->
                 areaType.jsonObject["areas"]?.jsonArray.orEmpty().forEach { area ->
+                    val areaCode = area.jsonObject["code"]?.jsonPrimitive?.contentOrNull
+                    if (localArea != null && !localArea.matches(areaCode)) return@forEach
                     area.jsonObject["warnings"]?.jsonArray.orEmpty().forEach { warning ->
                         val item = warning.jsonObject
                         val status = item["status"]?.jsonPrimitive?.contentOrNull.orEmpty()
@@ -62,7 +65,12 @@ class JmaDisasterClient(
                     }
                 }
             }
-            return WarningSummary(headline, warningNames.sortedWith(warningComparator))
+            val activeWarnings = warningNames.sortedWith(warningComparator)
+            return WarningSummary(
+                headline = headline.takeIf { activeWarnings.isNotEmpty() },
+                activeWarnings = activeWarnings,
+                areaName = localArea?.name,
+            )
         }
     }
 
@@ -104,12 +112,52 @@ class JmaDisasterClient(
             cos(Math.toRadians(latitude)) * cos(Math.toRadians(lat)) * sin(dLon / 2).pow(2.0)
         return radius * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
+
+    private fun localWarningArea(office: JmaOffice, location: WeatherLocation): LocalWarningArea? {
+        if (office.code != "130000") return null
+        val latitude = location.latitude
+        val longitude = location.longitude
+        return when {
+            latitude < 28.5 && longitude > 140.0 -> LocalWarningArea(
+                name = "小笠原諸島",
+                exactCodes = setOf("130040"),
+                prefixes = listOf("134"),
+            )
+            latitude < 34.2 -> LocalWarningArea(
+                name = "伊豆諸島南部",
+                exactCodes = setOf("130030", "130031", "130032"),
+                prefixes = listOf("1338"),
+            )
+            latitude < 35.15 && longitude > 138.7 -> LocalWarningArea(
+                name = "伊豆諸島北部",
+                exactCodes = setOf("130020", "130021", "130022"),
+                prefixes = listOf("1336", "1337"),
+            )
+            else -> LocalWarningArea(
+                name = "東京地方",
+                exactCodes = setOf("130010", "130011", "130012", "130013", "130014", "130015"),
+                prefixes = listOf("131", "132"),
+            )
+        }
+    }
 }
 
 private data class WarningSummary(
     val headline: String?,
     val activeWarnings: List<String>,
+    val areaName: String?,
 )
+
+private data class LocalWarningArea(
+    val name: String,
+    val exactCodes: Set<String>,
+    val prefixes: List<String>,
+) {
+    fun matches(code: String?): Boolean {
+        if (code == null) return false
+        return code in exactCodes || prefixes.any { code.startsWith(it) }
+    }
+}
 
 private data class JmaOffice(
     val code: String,
