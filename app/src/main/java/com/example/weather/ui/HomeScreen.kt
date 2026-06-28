@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -820,8 +821,8 @@ private fun HomeHourlySection(hours: List<HourlyWeather>) {
 @Composable
 fun HourlyDayTimeline(date: LocalDate, dayHours: List<HourlyWeather>) {
     SectionCard(containerColor = Color(0xFF202124)) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        DayBadge(date)
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            DayBadge(date)
             HourlyRainTimeline(dayHours)
         }
     }
@@ -847,88 +848,90 @@ fun DayBadge(date: LocalDate) {
         Modifier
             .clip(RoundedCornerShape(10.dp))
             .background(accent.copy(alpha = 0.16f))
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = 16.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (relative != null) {
-            Text(relative, color = accent, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+            Text(relative, color = accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
-        Text(dateText, color = MaterialTheme.colorScheme.onSurface, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+        Text(dateText, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.Bold)
     }
 }
 
 @Composable
 fun HourlyRainTimeline(hours: List<HourlyWeather>) {
+    val density = LocalDensity.current
     val temps = hours.mapNotNull { it.temperatureC }
     val minTemp = temps.minOrNull() ?: 0.0
     val maxTemp = temps.maxOrNull() ?: 1.0
     val tempColor = Color(0xFFFF7A1A)
-    val lowTempColor = Color(0xFF5BA7FF)
     val rainColor = MaterialTheme.colorScheme.secondary
     val textColor = MaterialTheme.colorScheme.onSurface.toArgb()
     val mutedColor = MaterialTheme.colorScheme.onSurfaceVariant.toArgb()
     val gridColor = Color(0xFF3A3A3E)
     val now = remember { LocalDateTime.now(ZoneId.of("Asia/Tokyo")) }
     val maxRain = hours.mapNotNull { it.precipitationMm }.maxOrNull()?.coerceAtLeast(1.0) ?: 1.0
+    val timelineHeight = 286.dp
+    val timeTextSize = with(density) { 14.sp.toPx() }
+    val iconTextSize = with(density) { 25.sp.toPx() }
+    val tempTextSize = with(density) { 15.sp.toPx() }
+    val rainTextSize = with(density) { 16.sp.toPx() }
+    val amountTextSize = with(density) { 14.sp.toPx() }
+    val amountSmallTextSize = with(density) { 13.sp.toPx() }
 
     Canvas(
         Modifier
-            .width((hours.size.coerceAtLeast(1) * 62).dp)
-            .height(238.dp),
+            .width((hours.size.coerceAtLeast(1) * 88).dp)
+            .height(timelineHeight),
     ) {
         if (hours.isEmpty()) return@Canvas
-        val topY = 22f
-        val iconY = 58f
-        val tempGraphTop = 82f
-        val tempGraphBottom = 138f
-        val probabilityY = 166f
-        val amountBarBase = 204f
-        val amountTextY = 226f
+        val topY = 32f
+        val iconY = 78f
+        val tempGraphTop = 108f
+        val tempGraphBottom = 168f
+        val probabilityY = 202f
+        val amountBarBase = 246f
+        val amountTextY = 272f
         val graphHeight = tempGraphBottom - tempGraphTop
         val columnWidth = size.width / hours.size.coerceAtLeast(1)
         val timePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = mutedColor
-            textSize = 20f
+            textSize = timeTextSize
             textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = textColor
-            textSize = 25f
+            textSize = iconTextSize
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val tempPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = tempColor.toArgb()
-            textSize = 20f
-            textAlign = Paint.Align.CENTER
-            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
-        }
-        val lowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = lowTempColor.toArgb()
-            textSize = 20f
+            textSize = tempTextSize
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val rainPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = rainColor.toArgb()
-            textSize = 20f
+            textSize = rainTextSize
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val amountPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = Color(0xFF202124).toArgb()
-            textSize = 18f
+            textSize = amountTextSize
             textAlign = Paint.Align.CENTER
             typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
         }
         val amountSmallPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             color = mutedColor
-            textSize = 17f
+            textSize = amountSmallTextSize
             textAlign = Paint.Align.CENTER
         }
 
-        drawLine(gridColor, Offset(0f, 72f), Offset(size.width, 72f), strokeWidth = 1f)
+        drawLine(gridColor, Offset(0f, 96f), Offset(size.width, 96f), strokeWidth = 1f)
         drawLine(gridColor, Offset(0f, probabilityY + 10f), Offset(size.width, probabilityY + 10f), strokeWidth = 1f)
 
         hours.forEachIndexed { index, hour ->
@@ -938,9 +941,9 @@ fun HourlyRainTimeline(hours: List<HourlyWeather>) {
             if (isNow) {
                 drawRoundRect(
                     color = rainColor.copy(alpha = 0.14f),
-                    topLeft = Offset(index * columnWidth + 3f, 0f),
-                    size = Size(columnWidth - 6f, size.height),
-                    cornerRadius = CornerRadius(10f, 10f),
+                    topLeft = Offset(index * columnWidth + 5f, 0f),
+                    size = Size(columnWidth - 10f, size.height),
+                    cornerRadius = CornerRadius(18f, 18f),
                 )
             }
             drawContext.canvas.nativeCanvas.drawText(
@@ -960,14 +963,14 @@ fun HourlyRainTimeline(hours: List<HourlyWeather>) {
             IndexedPoint(index, Offset(x, y), temp)
         }
         points.zipWithNext().forEach { (a, b) ->
-            drawLine(tempColor, a.offset, b.offset, strokeWidth = 4f, cap = StrokeCap.Round)
+            drawLine(tempColor, a.offset, b.offset, strokeWidth = 5f, cap = StrokeCap.Round)
         }
         points.forEach { point ->
-            drawCircle(tempColor, radius = 4f, center = point.offset)
+            drawCircle(tempColor, radius = 5f, center = point.offset)
             drawContext.canvas.nativeCanvas.drawText(
                 point.temperature.roundText(),
                 point.offset.x,
-                (point.offset.y + 24f).coerceAtMost(tempGraphBottom + 22f),
+                (point.offset.y + 30f).coerceAtMost(tempGraphBottom + 28f),
                 tempPaint,
             )
         }
@@ -978,17 +981,17 @@ fun HourlyRainTimeline(hours: List<HourlyWeather>) {
             val amount = hour.precipitationMm ?: 0.0
             drawContext.canvas.nativeCanvas.drawText("${probability}%", x, probabilityY, rainPaint)
 
-            val barHeight = (amount / maxRain).toFloat().coerceIn(0f, 1f) * 28f
+            val barHeight = (amount / maxRain).toFloat().coerceIn(0f, 1f) * 34f
             drawRoundRect(
                 color = Color.White.copy(alpha = 0.95f),
-                topLeft = Offset(x - 17f, amountBarBase - 18f - barHeight),
-                size = Size(34f, 18f + barHeight),
-                cornerRadius = CornerRadius(2f, 2f),
+                topLeft = Offset(x - 22f, amountBarBase - 24f - barHeight),
+                size = Size(44f, 24f + barHeight),
+                cornerRadius = CornerRadius(4f, 4f),
             )
             drawContext.canvas.nativeCanvas.drawText(
                 if (amount >= 10.0) amount.oneDecimal() else amount.roundText(),
                 x,
-                amountBarBase - 5f,
+                amountBarBase - 7f,
                 amountPaint,
             )
             drawContext.canvas.nativeCanvas.drawText(
