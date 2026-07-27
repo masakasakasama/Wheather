@@ -23,17 +23,25 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AcUnit
+import androidx.compose.material.icons.filled.Bolt
+import androidx.compose.material.icons.filled.Cloud
+import androidx.compose.material.icons.filled.Navigation
 import androidx.compose.material.icons.filled.WarningAmber
+import androidx.compose.material.icons.filled.WaterDrop
+import androidx.compose.material.icons.filled.WbSunny
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Air
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WaterDrop
@@ -65,6 +73,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -74,6 +83,7 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.weather.WeatherUiState
@@ -122,18 +132,20 @@ fun HomeScreen(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(18.dp),
-        contentPadding = PaddingValues(top = 18.dp, bottom = 22.dp),
+            .padding(horizontal = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(top = 8.dp, bottom = 20.dp),
     ) {
         item {
             HomeHeader(
-                locationName = state.selectedLocation.name,
+                selectedLocation = state.selectedLocation,
+                savedLocations = state.savedLocations,
                 freshness = formatFreshness(snapshot?.updatedAtMillis),
                 isRefreshing = state.isRefreshing,
                 onRefresh = onRefresh,
                 onLocation = { showLocationDialog = true },
                 onSettings = { showSettingsDialog = true },
+                onSelectLocation = onSelectLocation,
             )
         }
 
@@ -155,12 +167,9 @@ fun HomeScreen(
             if (state.disasterSummary?.hasImportantInfo == true) {
                 item { DisasterSummaryCard(state.disasterSummary) }
             }
-            item { CurrentSummary(snapshot) }
-            item { DailyAdviceSection(snapshot, next48Hours) }
-            item { AirQualityCard(snapshot.airQuality) }
-            item { RainSummary(snapshot, next48Hours) }
+            item { DailyForecastPanel(snapshot) }
+            item { CurrentConditionsPanel(snapshot) }
             item { NowcastRainSection(snapshot.minutely15.nextMinutely15(12)) }
-            item { HomeHourlySection(next48Hours) }
             item {
                 HomeWeeklySection(
                     days = snapshot.daily.take(14),
@@ -230,71 +239,542 @@ fun HomeScreen(
 
 @Composable
 private fun HomeHeader(
-    locationName: String,
+    selectedLocation: WeatherLocation,
+    savedLocations: List<WeatherLocation>,
     freshness: String,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
     onLocation: () -> Unit,
     onSettings: () -> Unit,
+    onSelectLocation: (WeatherLocation) -> Unit,
 ) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(WeatherPalette.Header),
     ) {
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                Icon(
-                    Icons.Outlined.LocationOn,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp),
-                )
-                Text(locationName, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .height(66.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                contentPadding = PaddingValues(start = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                items(savedLocations) { location ->
+                    val selected = location.samePlaceAs(selectedLocation)
+                    Column(
+                        Modifier
+                            .widthIn(min = 96.dp, max = 142.dp)
+                            .fillMaxHeight()
+                            .clickable { onSelectLocation(location) }
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        ) {
+                            if (selected) {
+                                Icon(
+                                    Icons.Outlined.LocationOn,
+                                    contentDescription = null,
+                                    tint = Color.White,
+                                    modifier = Modifier.size(15.dp),
+                                )
+                            }
+                            Text(
+                                if (selected && location.name == "現在地") "現在地" else location.name,
+                                maxLines = 1,
+                                color = if (selected) Color.White else Color.White.copy(alpha = 0.58f),
+                                fontSize = if (selected) 15.sp else 13.sp,
+                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                            )
+                        }
+                        if (selected) {
+                            Spacer(Modifier.height(6.dp))
+                            Box(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .height(3.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(Color.White),
+                            )
+                        }
+                    }
+                }
             }
-            Text(freshness, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
             FilledTonalIconButton(
                 onClick = onLocation,
                 colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = WeatherPalette.SurfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
+                    containerColor = Color.Transparent,
+                    contentColor = Color.White,
                 ),
             ) {
-                Icon(Icons.Outlined.Search, contentDescription = "地点")
+                Icon(Icons.Outlined.Add, contentDescription = "地点を追加")
             }
-            FilledTonalIconButton(
-                onClick = onSettings,
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = WeatherPalette.SurfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                ),
-            ) {
-                Icon(Icons.Outlined.Tune, contentDescription = "設定")
-            }
-            Button(
-                onClick = onRefresh,
-                enabled = !isRefreshing,
-                shape = MaterialTheme.shapes.small,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ),
-                contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
-            ) {
-                if (isRefreshing) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                } else {
-                    Icon(Icons.Outlined.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
+        }
+        HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(freshness, fontSize = 12.sp, color = Color.White.copy(alpha = 0.66f))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalIconButton(
+                    onClick = onRefresh,
+                    enabled = !isRefreshing,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    if (isRefreshing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White,
+                        )
+                    } else {
+                        Icon(Icons.Outlined.Refresh, contentDescription = "更新", modifier = Modifier.size(21.dp))
+                    }
                 }
-                Spacer(Modifier.width(6.dp))
-                Text(if (isRefreshing) "更新中" else "更新", fontWeight = FontWeight.SemiBold)
+                FilledTonalIconButton(
+                    onClick = onSettings,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Icon(Icons.Outlined.Tune, contentDescription = "設定", modifier = Modifier.size(21.dp))
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun DailyForecastPanel(snapshot: WeatherSnapshot) {
+    val days = snapshot.daily.take(2)
+    val hours = snapshot.hourly.nextHours(12)
+    val today = snapshot.today()
+    SectionCard(containerColor = WeatherPalette.ForecastSurface) {
+        Column {
+            Row(Modifier.fillMaxWidth()) {
+                days.forEachIndexed { index, day ->
+                    DailyForecastColumn(
+                        day = day,
+                        dayHours = snapshot.hourly.forDate(day.date),
+                        index = index,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (index == 0 && days.size > 1) {
+                        Box(
+                            Modifier
+                                .width(1.dp)
+                                .height(214.dp)
+                                .background(WeatherPalette.Outline),
+                        )
+                    }
+                }
+            }
+            ForecastTip(snapshot)
+            HorizontalDivider(color = WeatherPalette.Outline)
+            HourlyForecastTable(hours)
+            SunTimesRow(sunrise = today?.sunrise, sunset = today?.sunset)
+        }
+    }
+}
+
+@Composable
+private fun DailyForecastColumn(
+    day: DailyWeather,
+    dayHours: List<HourlyWeather>,
+    index: Int,
+    modifier: Modifier = Modifier,
+) {
+    val probability = day.effectiveMaxProbability(dayHours)
+    val relative = if (index == 0) "今日" else "明日"
+    Column(
+        modifier.padding(horizontal = 12.dp, vertical = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        Text(
+            "$relative ${formatDateWithWeekday(day.date)}",
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold,
+        )
+        WeatherGlyph(code = day.weatherCode, size = 80.dp)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(weatherLabel(day.weatherCode), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Icon(
+                    Icons.Outlined.WaterDrop,
+                    contentDescription = null,
+                    modifier = Modifier.size(15.dp),
+                    tint = WeatherPalette.Rain,
+                )
+                Text(probability.percentText(), fontSize = 15.sp)
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.Bottom) {
+            Text(
+                "${day.maxTemperatureC?.roundText() ?: "--"}°",
+                color = WeatherPalette.HighTemperature,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                "${day.minTemperatureC?.roundText() ?: "--"}°",
+                color = WeatherPalette.LowTemperature,
+                fontSize = 22.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ForecastTip(snapshot: WeatherSnapshot) {
+    val today = snapshot.today()
+    val dayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
+    val signal = rainSignal(today.effectiveMaxProbability(dayHours), today.effectivePrecipitationSum(dayHours))
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+            .clip(RoundedCornerShape(6.dp))
+            .background(WeatherPalette.SurfaceVariant)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(9.dp),
+    ) {
+        Text(if (signal.action.contains("傘")) "☂️" else "💡", fontSize = 20.sp)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(signal.action, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = signal.color)
+            Text(nextRainText(snapshot), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun HourlyForecastTable(hours: List<HourlyWeather>) {
+    if (hours.isEmpty()) {
+        Text(
+            "時間別予報を取得できません",
+            modifier = Modifier.padding(16.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    val scrollState = rememberScrollState()
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 10.dp),
+    ) {
+        Column(Modifier.width(48.dp)) {
+            ForecastTableLabel("時刻", 28)
+            ForecastTableLabel("", 48)
+            ForecastTableLabel("気温", 30)
+            ForecastTableLabel("降水", 30)
+            ForecastTableLabel("雨量", 30)
+            ForecastTableLabel("湿度", 30)
+            ForecastTableLabel("風", 52)
+        }
+        Row(Modifier.horizontalScroll(scrollState)) {
+            hours.forEach { hour ->
+                Column(
+                    Modifier.width(72.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    ForecastTableValue(if (isCurrentHour(hour.time)) "今" else formatHourOnly(hour.time), 28, 12, false)
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(48.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        WeatherGlyph(code = hour.weatherCode, size = 36.dp)
+                    }
+                    ForecastTableValue("${hour.temperatureC?.roundText() ?: "--"}°", 30, 14, true)
+                    ForecastTableValue(hour.precipitationProbability.percentText(), 30, 13, false, WeatherPalette.Rain)
+                    ForecastTableValue(hour.precipitationMm.mmText(), 30, 12, false)
+                    ForecastTableValue(hour.humidityPercent.percentText(), 30, 12, false)
+                    ForecastWindValue(hour)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ForecastWindValue(hour: HourlyWeather) {
+    val rotation = ((hour.windDirectionDeg ?: 0) + 180).toFloat()
+    val speedMs = hour.windSpeedKmh?.div(3.6)
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Icon(
+                Icons.Filled.Navigation,
+                contentDescription = null,
+                tint = WeatherPalette.Rain,
+                modifier = Modifier
+                    .size(16.dp)
+                    .rotate(rotation),
+            )
+            Text(
+                "${windDirectionText(hour.windDirectionDeg)} ${speedMs?.oneDecimal() ?: "--"}m/s",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SunTimesRow(sunrise: String?, sunset: String?) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(WeatherPalette.SurfaceVariant)
+            .padding(horizontal = 14.dp, vertical = 9.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        SunTime("日の出", sunrise, WeatherPalette.Tertiary)
+        Box(
+            Modifier
+                .width(1.dp)
+                .height(24.dp)
+                .background(WeatherPalette.Outline),
+        )
+        SunTime("日の入", sunset, WeatherPalette.LowTemperature)
+    }
+}
+
+@Composable
+private fun SunTime(label: String, time: String?, color: Color) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+        Icon(
+            Icons.Filled.WbSunny,
+            contentDescription = null,
+            tint = color,
+            modifier = Modifier.size(18.dp),
+        )
+        Text("$label ${formatTimeOnly(time)}", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+@Composable
+private fun ForecastTableLabel(label: String, heightDp: Int) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(heightDp.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun ForecastTableValue(
+    value: String,
+    heightDp: Int,
+    fontSizeSp: Int,
+    bold: Boolean,
+    color: Color = MaterialTheme.colorScheme.onSurface,
+) {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .height(heightDp.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            value,
+            fontSize = fontSizeSp.sp,
+            fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
+            color = color,
+            maxLines = 1,
+        )
+    }
+}
+
+@Composable
+private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
+    val today = snapshot.today()
+    SectionCard(containerColor = WeatherPalette.ForecastSurface) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("いまの天気", fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                    Text(
+                        weatherLabel(snapshot.current.weatherCode),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                }
+                WeatherGlyph(code = snapshot.current.weatherCode, size = 48.dp)
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                CurrentMetric("気温", snapshot.current.temperatureC.temperatureText(), Modifier.weight(1f), 29)
+                CurrentMetric("気圧", snapshot.current.pressureHpa.pressureText(), Modifier.weight(1f), 22)
+                CurrentMetric("湿度", snapshot.current.humidityPercent.percentText(), Modifier.weight(1f), 22)
+            }
+            HorizontalDivider(color = WeatherPalette.Outline)
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                CurrentMetric("体感", snapshot.current.apparentTemperatureC.temperatureText(), Modifier.weight(1f), 15)
+                CurrentMetric("風", windText(snapshot.current.windSpeedKmh, snapshot.current.windDirectionDeg), Modifier.weight(1f), 15)
+                CurrentMetric("AQI", snapshot.airQuality?.europeanAqi?.toString() ?: "--", Modifier.weight(1f), 15)
+                CurrentMetric("UV", today?.uvIndexMax.uvText(), Modifier.weight(1f), 15)
+            }
+            RadarPreview(
+                location = snapshot.location,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(170.dp)
+                    .clip(RoundedCornerShape(5.dp)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CurrentMetric(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+    fontSizeSp: Int,
+) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(label, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontSize = fontSizeSp.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+@Composable
+fun WeatherGlyph(code: Int?, size: Dp, modifier: Modifier = Modifier) {
+    val cloudColor = Color(0xFFB8B9BD)
+    val sunColor = Color(0xFFFF8A34)
+    val rainColor = Color(0xFF4F8DFF)
+    val lightningColor = Color(0xFFFFC928)
+
+    Box(
+        modifier = modifier.size(size),
+        contentAlignment = Alignment.Center,
+    ) {
+        when (code) {
+            0 -> Icon(
+                Icons.Filled.WbSunny,
+                contentDescription = weatherLabel(code),
+                tint = sunColor,
+                modifier = Modifier.size(size * 0.82f),
+            )
+
+            1, 2 -> {
+                Icon(
+                    Icons.Filled.WbSunny,
+                    contentDescription = null,
+                    tint = sunColor,
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .size(size * 0.62f),
+                )
+                Icon(
+                    Icons.Filled.Cloud,
+                    contentDescription = weatherLabel(code),
+                    tint = cloudColor,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .size(size * 0.78f),
+                )
+            }
+
+            51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> {
+                Icon(
+                    Icons.Filled.Cloud,
+                    contentDescription = weatherLabel(code),
+                    tint = cloudColor,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(size * 0.8f),
+                )
+                Icon(
+                    Icons.Filled.WaterDrop,
+                    contentDescription = null,
+                    tint = rainColor,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(size * 0.43f),
+                )
+            }
+
+            71, 73, 75, 77, 85, 86 -> {
+                Icon(
+                    Icons.Filled.Cloud,
+                    contentDescription = weatherLabel(code),
+                    tint = cloudColor,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(size * 0.8f),
+                )
+                Icon(
+                    Icons.Filled.AcUnit,
+                    contentDescription = null,
+                    tint = Color(0xFF8CCBFF),
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(size * 0.46f),
+                )
+            }
+
+            95, 96, 99 -> {
+                Icon(
+                    Icons.Filled.Cloud,
+                    contentDescription = weatherLabel(code),
+                    tint = cloudColor,
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(size * 0.8f),
+                )
+                Icon(
+                    Icons.Filled.Bolt,
+                    contentDescription = null,
+                    tint = lightningColor,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(size * 0.5f),
+                )
+            }
+
+            else -> Icon(
+                Icons.Filled.Cloud,
+                contentDescription = weatherLabel(code),
+                tint = cloudColor,
+                modifier = Modifier.size(size * 0.82f),
+            )
         }
     }
 }
@@ -503,7 +983,6 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
                     "${snapshot.current.temperatureC?.roundText() ?: "--"}°",
                     fontSize = 92.sp,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = (-2).sp,
                     color = Color.White,
                 )
                 Text(
@@ -766,7 +1245,7 @@ private fun MinutelyRainCard(minute: MinutelyWeather) {
             verticalArrangement = Arrangement.spacedBy(7.dp),
         ) {
             Text(formatMinuteLabel(minute.time), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 11.sp)
-            Text(weatherIcon(minute.weatherCode), fontSize = 20.sp)
+            WeatherGlyph(code = minute.weatherCode, size = 30.dp)
             Text(signal.action, color = signal.color, fontSize = 12.sp, fontWeight = FontWeight.Bold)
             Text(probability.percentText(), color = MaterialTheme.colorScheme.secondary, fontSize = 16.sp, fontWeight = FontWeight.Bold)
             ProbabilityBar(probability)
@@ -823,7 +1302,7 @@ fun HourlyDayTimeline(date: LocalDate, dayHours: List<HourlyWeather>) {
     SectionCard(containerColor = Color(0xFF202124)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             DayBadge(date)
-            HourlyRainTimeline(dayHours)
+            HourlyForecastTable(dayHours)
         }
     }
 }
@@ -1071,15 +1550,15 @@ private fun isCurrentHour(time: String): Boolean {
 
 @Composable
 private fun HomeWeeklySection(days: List<DailyWeather>, hourly: List<HourlyWeather>, onDayClick: (DailyWeather) -> Unit) {
+    val remainingDays = days.drop(2)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("2週間天気", "日付・天気・気温・降水を一覧")
-        WeeklyTodayTomorrowStrip(days, hourly)
-        SectionCard(containerColor = Color(0xFF202124)) {
+        SectionHeader("2週間天気", "今日・明日以降の見通し")
+        SectionCard(containerColor = WeatherPalette.ForecastSurface) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                days.forEachIndexed { index, day ->
+                remainingDays.forEachIndexed { index, day ->
                     CompactWeeklyRow(day = day, dayHours = hourly.forDate(day.date), onClick = { onDayClick(day) })
-                    if (index != days.lastIndex) {
-                        HorizontalDivider(color = Color(0xFF383A3E))
+                    if (index != remainingDays.lastIndex) {
+                        HorizontalDivider(color = WeatherPalette.Outline)
                     }
                 }
             }
@@ -1097,46 +1576,63 @@ private fun CompactWeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, o
     val parts = dayPeriodSummaries(dayHours)
     val maxProbability = day.effectiveMaxProbability(dayHours)
     val precipitationSum = day.effectivePrecipitationSum(dayHours)
-    val signal = rainSignal(maxProbability, precipitationSum)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 12.dp),
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+            .padding(vertical = 11.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.width(86.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(formatDateWithWeekday(day.date), fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Text(signal.action, fontSize = 11.sp, color = signal.color, fontWeight = FontWeight.SemiBold)
+        Column(Modifier.width(78.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+            Text(formatDateWithWeekday(day.date), fontSize = 15.sp)
+            Text(weatherLabel(day.weatherCode), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Text(
-            weatherIcon(day.weatherCode),
-            modifier = Modifier.width(58.dp),
-            fontSize = 28.sp,
-            fontWeight = FontWeight.Bold,
+        WeatherGlyph(
+            code = day.weatherCode,
+            size = 38.dp,
+            modifier = Modifier.width(42.dp),
         )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                Text("${day.maxTemperatureC?.roundText() ?: "--"}", color = Color(0xFFFF7A1A), fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text("${day.minTemperatureC?.roundText() ?: "--"}", color = Color(0xFF5BA7FF), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Text(
+                    "${day.maxTemperatureC?.roundText() ?: "--"}°",
+                    color = WeatherPalette.HighTemperature,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    "${day.minTemperatureC?.roundText() ?: "--"}°",
+                    color = WeatherPalette.LowTemperature,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                     Icon(
                         Icons.Outlined.WaterDrop,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(15.dp),
+                        tint = WeatherPalette.Rain,
+                        modifier = Modifier.size(14.dp),
                     )
-                    Text(maxProbability.percentText(), color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
+                    Text(maxProbability.percentText(), fontSize = 15.sp)
                 }
             }
             Text(
-                "${weatherLabel(day.weatherCode)} / ${precipitationSum.mmText()} / AM ${parts.first.maxProbability.percentText()} PM ${parts.second.maxProbability.percentText()}",
+                "AM ${parts.first.maxProbability.percentText()}  PM ${parts.second.maxProbability.percentText()}  ${precipitationSum.mmText()}",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontSize = 11.sp,
             )
         }
-        Text("+", color = MaterialTheme.colorScheme.secondary, fontSize = 24.sp, fontWeight = FontWeight.Bold)
+        Icon(
+            Icons.Outlined.ChevronRight,
+            contentDescription = "詳細",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(20.dp),
+        )
     }
 }
 
@@ -1237,7 +1733,10 @@ fun DayDetailDialog(day: DailyWeather, dayHours: List<HourlyWeather>, onDismiss:
         title = { Text(formatDateLong(day.date)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("${weatherIcon(day.weatherCode)} ${weatherLabel(day.weatherCode)}", fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    WeatherGlyph(code = day.weatherCode, size = 38.dp)
+                    Text(weatherLabel(day.weatherCode), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+                }
                 Text("${signal.action}: ${signal.label}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = signal.color)
                 Text(signal.detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 RainRiskBar(maxProbability, precipitation)
@@ -1245,8 +1744,8 @@ fun DayDetailDialog(day: DailyWeather, dayHours: List<HourlyWeather>, onDismiss:
                 LabelValueRow("最大降水 / 雨量", "${maxProbability.percentText()} / ${precipitation.mmText()}", MaterialTheme.colorScheme.secondary)
                 LabelValueRow("UV指数", day.uvIndexMax.uvText(), MaterialTheme.colorScheme.onSurface)
                 LabelValueRow("日の出 / 日の入", "${formatTimeOnly(day.sunrise)} / ${formatTimeOnly(day.sunset)}", MaterialTheme.colorScheme.onSurface)
-                LabelValueRow("AM", "${rainSignal(parts.first.maxProbability, parts.first.precipitationSum).action}・${weatherIcon(parts.first.weatherCode)} ${parts.first.maxProbability.percentText()} / ${parts.first.precipitationSum.mmText()}", MaterialTheme.colorScheme.onSurface)
-                LabelValueRow("PM", "${rainSignal(parts.second.maxProbability, parts.second.precipitationSum).action}・${weatherIcon(parts.second.weatherCode)} ${parts.second.maxProbability.percentText()} / ${parts.second.precipitationSum.mmText()}", MaterialTheme.colorScheme.onSurface)
+                LabelValueRow("AM", "${rainSignal(parts.first.maxProbability, parts.first.precipitationSum).action}・${weatherLabel(parts.first.weatherCode)} ${parts.first.maxProbability.percentText()} / ${parts.first.precipitationSum.mmText()}", MaterialTheme.colorScheme.onSurface)
+                LabelValueRow("PM", "${rainSignal(parts.second.maxProbability, parts.second.precipitationSum).action}・${weatherLabel(parts.second.weatherCode)} ${parts.second.maxProbability.percentText()} / ${parts.second.precipitationSum.mmText()}", MaterialTheme.colorScheme.onSurface)
             }
         },
         confirmButton = {

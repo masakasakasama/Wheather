@@ -51,6 +51,9 @@ data class HourlyWeather(
     val precipitationProbability: Int?,
     val weatherCode: Int?,
     val precipitationMm: Double?,
+    val humidityPercent: Int? = null,
+    val windSpeedKmh: Double? = null,
+    val windDirectionDeg: Int? = null,
 )
 
 @Serializable
@@ -126,6 +129,9 @@ data class OpenMeteoHourly(
     @SerialName("precipitation_probability") val precipitationProbability: List<Int?> = emptyList(),
     @SerialName("weather_code") val weatherCode: List<Int?> = emptyList(),
     val precipitation: List<Double?> = emptyList(),
+    @SerialName("relative_humidity_2m") val humidity: List<Int?> = emptyList(),
+    @SerialName("wind_speed_10m") val windSpeed: List<Double?> = emptyList(),
+    @SerialName("wind_direction_10m") val windDirection: List<Int?> = emptyList(),
 )
 
 @Serializable

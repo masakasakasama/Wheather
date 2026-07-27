@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -103,7 +104,40 @@ fun RadarScreen(location: WeatherLocation) {
                         tileOffsetY = 0
                     },
                 )
-                RadarTileGrid(radar)
+                RadarTileGrid(radar, Modifier.fillMaxSize())
+            }
+        }
+    }
+}
+
+@Composable
+fun RadarPreview(location: WeatherLocation, modifier: Modifier = Modifier) {
+    var state by remember(location) { mutableStateOf<RadarUiState>(RadarUiState.Loading) }
+
+    LaunchedEffect(location.latitude, location.longitude) {
+        state = runCatching { loadRadar(location, DEFAULT_RADAR_ZOOM, 0, 0) }
+            .getOrElse { RadarUiState.Error("雨雲レーダーを取得できません") }
+    }
+
+    Box(modifier.background(Color(0xFF12151B)), contentAlignment = Alignment.Center) {
+        when (val radar = state) {
+            RadarUiState.Loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            is RadarUiState.Error -> Text(
+                radar.message,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.labelMedium,
+            )
+            is RadarUiState.Ready -> {
+                RadarTileGrid(radar, Modifier.fillMaxSize())
+                Text(
+                    "雨雲レーダー ${radar.frame.validTime.toDisplayRadarTime()}",
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .background(Color.Black.copy(alpha = 0.7f))
+                        .padding(horizontal = 8.dp, vertical = 5.dp),
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall,
+                )
             }
         }
     }
@@ -138,11 +172,9 @@ private fun RadarControls(
 }
 
 @Composable
-private fun RadarTileGrid(radar: RadarUiState.Ready) {
+private fun RadarTileGrid(radar: RadarUiState.Ready, modifier: Modifier) {
     BoxWithConstraints(
-        Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0A0E16)),
+        modifier.background(Color(0xFF0A0E16)),
         contentAlignment = Alignment.Center,
     ) {
         val tileSize = maxWidth / 3

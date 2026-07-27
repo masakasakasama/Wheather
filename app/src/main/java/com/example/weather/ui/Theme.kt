@@ -15,16 +15,21 @@ import androidx.compose.ui.unit.dp
  * place makes it easy to keep every screen visually consistent.
  */
 object WeatherPalette {
-    val Background = Color(0xFF0A0E16)
-    val Surface = Color(0xFF141926)
-    val SurfaceElevated = Color(0xFF1A2030)
-    val SurfaceVariant = Color(0xFF222A3B)
-    val Outline = Color(0xFF2C3447)
+    val Background = Color(0xFF0B0C0E)
+    val Header = Color(0xFF172843)
+    val Surface = Color(0xFF18191B)
+    val SurfaceElevated = Color(0xFF202124)
+    val SurfaceVariant = Color(0xFF27282B)
+    val ForecastSurface = Color(0xFF202123)
+    val Outline = Color(0xFF393A3D)
 
-    val Primary = Color(0xFF5AC8FA)
-    val Secondary = Color(0xFF64D2FF)
-    val Tertiary = Color(0xFFFFC95C)
-    val Accent = Color(0xFF8E97FD)
+    val Primary = Color(0xFF61C8FF)
+    val Secondary = Color(0xFF5EC7F3)
+    val Tertiary = Color(0xFFFFB14A)
+    val Accent = Color(0xFF7DA9E8)
+    val Rain = Color(0xFF60C9FA)
+    val HighTemperature = Color(0xFFFF6B67)
+    val LowTemperature = Color(0xFF67A9FF)
 
     val OnSurface = Color(0xFFF4F6FB)
     val OnSurfaceVariant = Color(0xFFA7B0C4)
@@ -35,11 +40,11 @@ object WeatherPalette {
 }
 
 val WeatherShapes = Shapes(
-    extraSmall = RoundedCornerShape(12.dp),
-    small = RoundedCornerShape(20.dp),
-    medium = RoundedCornerShape(24.dp),
-    large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(32.dp),
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
+    large = RoundedCornerShape(10.dp),
+    extraLarge = RoundedCornerShape(12.dp),
 )
 
 @Composable

@@ -68,7 +68,7 @@ class OpenMeteoClient(
             .addQueryParameter("longitude", location.longitude.toString())
             .addQueryParameter("current", "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation,wind_speed_10m,wind_direction_10m,pressure_msl")
             .addQueryParameter("minutely_15", "temperature_2m,precipitation_probability,weather_code,precipitation")
-            .addQueryParameter("hourly", "temperature_2m,precipitation_probability,weather_code,precipitation")
+            .addQueryParameter("hourly", "temperature_2m,precipitation_probability,weather_code,precipitation,relative_humidity_2m,wind_speed_10m,wind_direction_10m")
             .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset")
             .addQueryParameter("forecast_days", "14")
             .addQueryParameter("forecast_minutely_15", "16")
@@ -112,6 +112,9 @@ class OpenMeteoClient(
                 precipitationProbability = hourly?.precipitationProbability?.getOrNull(index),
                 weatherCode = hourly?.weatherCode?.getOrNull(index),
                 precipitationMm = hourly?.precipitation?.getOrNull(index),
+                humidityPercent = hourly?.humidity?.getOrNull(index),
+                windSpeedKmh = hourly?.windSpeed?.getOrNull(index),
+                windDirectionDeg = hourly?.windDirection?.getOrNull(index),
             )
         }
         val dailyItems = daily?.time.orEmpty().mapIndexed { index, date ->
@@ -162,6 +165,12 @@ class OpenMeteoClient(
                 hour.copy(
                     precipitationProbability = hour.precipitationProbability
                         ?: fallbackHourly[hour.time]?.precipitationProbability,
+                    humidityPercent = hour.humidityPercent
+                        ?: fallbackHourly[hour.time]?.humidityPercent,
+                    windSpeedKmh = hour.windSpeedKmh
+                        ?: fallbackHourly[hour.time]?.windSpeedKmh,
+                    windDirectionDeg = hour.windDirectionDeg
+                        ?: fallbackHourly[hour.time]?.windDirectionDeg,
                 )
             },
             daily = daily.map { day ->

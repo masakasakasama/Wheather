@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.dp
 import com.example.weather.ui.HomeScreen
 import com.example.weather.ui.HourlyScreen
 import com.example.weather.ui.RadarScreen
+import com.example.weather.ui.WeatherPalette
 import com.example.weather.ui.WeatherTheme
 import com.example.weather.ui.WeeklyScreen
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -369,7 +370,7 @@ private fun WeatherApp(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar(
-                containerColor = Color(0xFF0E1320),
+                containerColor = WeatherPalette.Header,
                 tonalElevation = 0.dp,
             ) {
                 tabs.forEachIndexed { index, label ->
@@ -379,9 +380,9 @@ private fun WeatherApp(
                         icon = { Icon(icons[index], contentDescription = label) },
                         label = { Text(label) },
                         colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
                             selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = Color.Transparent,
                             unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
                             unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         ),
