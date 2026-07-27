@@ -169,7 +169,6 @@ fun HomeScreen(
             }
             item { DailyForecastPanel(snapshot) }
             item { CurrentConditionsPanel(snapshot) }
-            item { NowcastRainSection(snapshot.minutely15.nextMinutely15(12)) }
             item {
                 HomeWeeklySection(
                     days = snapshot.daily.take(14),
@@ -407,9 +406,10 @@ private fun DailyForecastColumn(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(7.dp),
     ) {
-        Text(
-            "$relative ${formatDateWithWeekday(day.date)}",
-            fontSize = 17.sp,
+        WeekendDateLabel(
+            date = day.date,
+            prefix = relative,
+            fontSizeSp = 17,
             fontWeight = FontWeight.Bold,
         )
         WeatherGlyph(code = day.weatherCode, size = 80.dp)
@@ -1322,7 +1322,6 @@ fun DayBadge(date: LocalDate) {
         1L -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
-    val dateText = date.format(DateTimeFormatter.ofPattern("M/d(E)", Locale.JAPANESE))
     Row(
         Modifier
             .clip(RoundedCornerShape(10.dp))
@@ -1334,7 +1333,11 @@ fun DayBadge(date: LocalDate) {
         if (relative != null) {
             Text(relative, color = accent, fontSize = 18.sp, fontWeight = FontWeight.Bold)
         }
-        Text(dateText, color = MaterialTheme.colorScheme.onSurface, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+        WeekendDateLabel(
+            date = date.toString(),
+            fontSizeSp = 17,
+            fontWeight = FontWeight.Bold,
+        )
     }
 }
 
@@ -1585,7 +1588,11 @@ private fun CompactWeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, o
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.width(78.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            Text(formatDateWithWeekday(day.date), fontSize = 15.sp)
+            WeekendDateLabel(
+                date = day.date,
+                fontSizeSp = 15,
+                fontWeight = FontWeight.Normal,
+            )
             Text(weatherLabel(day.weatherCode), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         WeatherGlyph(
@@ -2002,6 +2009,50 @@ fun formatDateShort(date: String): String {
 fun formatDateWithWeekday(date: String): String {
     val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
     return parsed?.format(DateTimeFormatter.ofPattern("MM/dd(E)", Locale.JAPANESE)) ?: date
+}
+
+@Composable
+private fun WeekendDateLabel(
+    date: String,
+    prefix: String? = null,
+    fontSizeSp: Int,
+    fontWeight: FontWeight,
+) {
+    val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
+    if (parsed == null) {
+        Text(
+            listOfNotNull(prefix, date).joinToString(" "),
+            fontSize = fontSizeSp.sp,
+            fontWeight = fontWeight,
+        )
+        return
+    }
+    val weekday = parsed.format(DateTimeFormatter.ofPattern("E", Locale.JAPANESE))
+    val weekdayColor = when (parsed.dayOfWeek) {
+        java.time.DayOfWeek.SATURDAY -> WeatherPalette.LowTemperature
+        java.time.DayOfWeek.SUNDAY -> WeatherPalette.HighTemperature
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (prefix != null) {
+            Text(
+                "$prefix ",
+                fontSize = fontSizeSp.sp,
+                fontWeight = fontWeight,
+            )
+        }
+        Text(
+            parsed.format(DateTimeFormatter.ofPattern("M/d")),
+            fontSize = fontSizeSp.sp,
+            fontWeight = fontWeight,
+        )
+        Text(
+            "($weekday)",
+            color = weekdayColor,
+            fontSize = fontSizeSp.sp,
+            fontWeight = fontWeight,
+        )
+    }
 }
 
 fun formatDateLong(date: String): String {
