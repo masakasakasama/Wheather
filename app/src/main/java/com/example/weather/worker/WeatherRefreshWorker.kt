@@ -11,6 +11,7 @@ import androidx.work.WorkerParameters
 import androidx.glance.appwidget.updateAll
 import com.example.weather.AppServices
 import com.example.weather.widget.WeatherWidget
+import com.example.weather.widget.WeatherSquareWidget
 import java.util.concurrent.TimeUnit
 
 class WeatherRefreshWorker(
@@ -29,6 +30,7 @@ class WeatherRefreshWorker(
             AppServices.notificationCenter.notifyWeatherEvents(snapshot, disasterSummary, settings)
         }
         WeatherWidget().updateAll(applicationContext)
+        WeatherSquareWidget().updateAll(applicationContext)
         return if (result.isSuccess) Result.success() else Result.retry()
     }
 

@@ -10,6 +10,7 @@ import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.widget.WeatherWidget
+import com.example.weather.widget.WeatherSquareWidget
 import kotlinx.coroutines.flow.Flow
 
 class WeatherRepository(
@@ -34,6 +35,7 @@ class WeatherRepository(
             saveLocation(location)
             cache.saveSnapshot(snapshot)
             WeatherWidget().updateAll(context)
+            WeatherSquareWidget().updateAll(context)
             snapshot
         }
     }

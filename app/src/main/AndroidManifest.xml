@@ -28,6 +28,7 @@
 
         <receiver
             android:name=".widget.WeatherWidgetReceiver"
+            android:label="@string/widget_resizable_name"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
@@ -35,6 +36,18 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/weather_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".widget.WeatherSquareWidgetReceiver"
+            android:label="@string/widget_square_name"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/weather_widget_square_info" />
         </receiver>
 
         <provider

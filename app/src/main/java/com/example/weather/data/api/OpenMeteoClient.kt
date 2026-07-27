@@ -22,22 +22,17 @@ class OpenMeteoClient(
     private val json: Json,
 ) {
     suspend fun fetchForecast(location: WeatherLocation): WeatherSnapshot = withContext(Dispatchers.IO) {
-        val preferred = request(location, useJmaModel = true)
-        if (preferred != null) {
-            val needsProbabilityFallback =
-                preferred.daily.any { it.maxPrecipitationProbability == null } ||
-                    preferred.hourly.any { it.precipitationProbability == null } ||
-                    preferred.minutely15.any { it.precipitationProbability == null }
-            val withProbabilities = if (needsProbabilityFallback) {
-                request(location, useJmaModel = false)?.let { preferred.withProbabilityFallback(it) } ?: preferred
-            } else {
-                preferred
-            }
-            withProbabilities.copy(usedFallbackModel = false)
-        } else {
-            request(location, useJmaModel = false)?.copy(usedFallbackModel = true)
-                ?: throw IOException("Open-Meteo forecast request failed")
-        }
+        request(location, useJmaModel = false)
+            ?.copy(
+                usedFallbackModel = false,
+                forecastSource = "Open-Meteo Best Match",
+            )
+            ?: request(location, useJmaModel = true)
+                ?.copy(
+                    usedFallbackModel = true,
+                    forecastSource = "Open-Meteo JMA Seamless（予備）",
+                )
+            ?: throw IOException("Open-Meteo forecast request failed")
     }
 
     suspend fun searchLocations(query: String): List<WeatherLocation> = withContext(Dispatchers.IO) {
@@ -147,43 +142,6 @@ class OpenMeteoClient(
             hourly = hourlyItems,
             daily = dailyItems,
             updatedAtMillis = System.currentTimeMillis(),
-        )
-    }
-
-    private fun WeatherSnapshot.withProbabilityFallback(fallback: WeatherSnapshot): WeatherSnapshot {
-        val fallbackMinutely = fallback.minutely15.associateBy { it.time }
-        val fallbackHourly = fallback.hourly.associateBy { it.time }
-        val fallbackDaily = fallback.daily.associateBy { it.date }
-        return copy(
-            minutely15 = minutely15.map { minute ->
-                minute.copy(
-                    precipitationProbability = minute.precipitationProbability
-                        ?: fallbackMinutely[minute.time]?.precipitationProbability,
-                )
-            },
-            hourly = hourly.map { hour ->
-                hour.copy(
-                    precipitationProbability = hour.precipitationProbability
-                        ?: fallbackHourly[hour.time]?.precipitationProbability,
-                    humidityPercent = hour.humidityPercent
-                        ?: fallbackHourly[hour.time]?.humidityPercent,
-                    windSpeedKmh = hour.windSpeedKmh
-                        ?: fallbackHourly[hour.time]?.windSpeedKmh,
-                    windDirectionDeg = hour.windDirectionDeg
-                        ?: fallbackHourly[hour.time]?.windDirectionDeg,
-                )
-            },
-            daily = daily.map { day ->
-                day.copy(
-                    maxPrecipitationProbability = day.maxPrecipitationProbability
-                        ?: fallbackDaily[day.date]?.maxPrecipitationProbability,
-                    precipitationSumMm = day.precipitationSumMm
-                        ?: fallbackDaily[day.date]?.precipitationSumMm,
-                    uvIndexMax = day.uvIndexMax ?: fallbackDaily[day.date]?.uvIndexMax,
-                    sunrise = day.sunrise ?: fallbackDaily[day.date]?.sunrise,
-                    sunset = day.sunset ?: fallbackDaily[day.date]?.sunset,
-                )
-            },
         )
     }
 }

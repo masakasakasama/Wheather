@@ -33,6 +33,7 @@ import com.example.weather.MainActivity
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
+import com.example.weather.data.model.weatherLabel
 import com.example.weather.ui.formatHourMinute
 import com.example.weather.ui.nextRainText
 import com.example.weather.ui.nextHours
@@ -59,6 +60,22 @@ class WeatherWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = WeatherWidget()
 }
 
+class WeatherSquareWidget : GlanceAppWidget() {
+    override val sizeMode = SizeMode.Exact
+
+    override suspend fun provideGlance(context: Context, id: GlanceId) {
+        AppServices.init(context)
+        val snapshot = AppServices.cache.readSnapshotOnce()
+        provideContent {
+            WeatherSquareWidgetContent(snapshot)
+        }
+    }
+}
+
+class WeatherSquareWidgetReceiver : GlanceAppWidgetReceiver() {
+    override val glanceAppWidget: GlanceAppWidget = WeatherSquareWidget()
+}
+
 @androidx.compose.runtime.Composable
 private fun WeatherWidgetContent(snapshot: WeatherSnapshot?) {
     val size = LocalSize.current
@@ -82,6 +99,43 @@ private fun EmptyWidget(modifier: GlanceModifier) {
         Text("個人天気", style = widgetText(15, bold = true))
         Spacer(GlanceModifier.height(6.dp))
         Text("アプリを開いて更新", style = widgetText(11, muted = true))
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun WeatherSquareWidgetContent(snapshot: WeatherSnapshot?) {
+    val modifier = GlanceModifier
+        .fillMaxSize()
+        .background(ColorProvider(Color(0xFF101114)))
+        .clickable(actionStartActivity<MainActivity>())
+        .padding(8.dp)
+    if (snapshot == null) {
+        EmptyWidget(modifier)
+        return
+    }
+
+    val today = snapshot.today()
+    val todayHours = today?.let { day ->
+        snapshot.hourly.filter { it.time.take(10) == day.date }
+    }.orEmpty()
+    Column(modifier) {
+        Text(snapshot.location.name, style = widgetText(10, bold = true), maxLines = 1)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(30, bold = true))
+            Spacer(GlanceModifier.width(7.dp))
+            Text(weatherIcon(snapshot.current.weatherCode), style = widgetText(22))
+        }
+        Text(
+            "${weatherLabel(snapshot.current.weatherCode)}  H ${today?.maxTemperatureC?.roundText() ?: "--"}° / L ${today?.minTemperatureC?.roundText() ?: "--"}°",
+            style = widgetText(11),
+            maxLines = 1,
+        )
+        Text(
+            "降水 ${today.effectiveMaxProbability(todayHours).percentText()}  ${today.effectivePrecipitationSum(todayHours).mmText()}",
+            style = widgetText(10, muted = true),
+            maxLines = 1,
+        )
+        Text(nextRainText(snapshot), style = widgetText(10, muted = true), maxLines = 1)
     }
 }
 

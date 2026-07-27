@@ -3,9 +3,10 @@ package com.example.weather.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -30,21 +31,19 @@ fun HourlyScreen(snapshot: WeatherSnapshot?) {
             return@Column
         }
 
-        val hours = remember(snapshot) { snapshot.hourly.nextHours(48) }
+        val hours = remember(snapshot) { snapshot.hourly.nextHours(snapshot.hourly.size) }
         Text(
-            "現在時刻以降の48時間。日付ごとに「今日／明日」でまとめています。",
+            "現在時刻から取得できる最終時刻まで、横にスクロールできます。",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 12.sp,
         )
 
-        val grouped = remember(hours) { groupHoursByDate(hours) }
-        Column(
-            Modifier.verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(22.dp),
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = WeatherPalette.ForecastSurface),
+            shape = MaterialTheme.shapes.medium,
         ) {
-            grouped.forEach { (date, dayHours) ->
-                HourlyDayTimeline(date = date, dayHours = dayHours)
-            }
+            HourlyForecastTable(hours)
         }
     }
 }

@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">個人天気</string>
+    <string name="widget_resizable_name">個人天気（横長）</string>
+    <string name="widget_square_name">個人天気（2×2）</string>
 </resources>

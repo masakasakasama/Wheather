@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -178,11 +179,7 @@ fun HomeScreen(
             }
             item {
                 Text(
-                    if (snapshot.usedFallbackModel) {
-                        "Open-Meteo best matchモデル"
-                    } else {
-                        "Open-Meteo JMA Seamless優先。降水確率は必要に応じてbest matchで補完"
-                    },
+                    snapshot.forecastSource,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 12.sp,
                 )
@@ -362,7 +359,7 @@ private fun HomeHeader(
 @Composable
 private fun DailyForecastPanel(snapshot: WeatherSnapshot) {
     val days = snapshot.daily.take(2)
-    val hours = snapshot.hourly.nextHours(12)
+    val hours = snapshot.hourly.nextHours(snapshot.hourly.size)
     val today = snapshot.today()
     SectionCard(containerColor = WeatherPalette.ForecastSurface) {
         Column {
@@ -469,7 +466,7 @@ private fun ForecastTip(snapshot: WeatherSnapshot) {
 }
 
 @Composable
-private fun HourlyForecastTable(hours: List<HourlyWeather>) {
+fun HourlyForecastTable(hours: List<HourlyWeather>) {
     if (hours.isEmpty()) {
         Text(
             "時間別予報を取得できません",
@@ -478,44 +475,86 @@ private fun HourlyForecastTable(hours: List<HourlyWeather>) {
         )
         return
     }
-    val scrollState = rememberScrollState()
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(vertical = 10.dp),
-    ) {
-        Column(Modifier.width(48.dp)) {
-            ForecastTableLabel("時刻", 28)
-            ForecastTableLabel("", 48)
-            ForecastTableLabel("気温", 30)
-            ForecastTableLabel("降水", 30)
-            ForecastTableLabel("雨量", 30)
-            ForecastTableLabel("湿度", 30)
-            ForecastTableLabel("風", 52)
-        }
-        Row(Modifier.horizontalScroll(scrollState)) {
-            hours.forEach { hour ->
-                Column(
-                    Modifier.width(72.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    ForecastTableValue(if (isCurrentHour(hour.time)) "今" else formatHourOnly(hour.time), 28, 12, false)
-                    Box(
-                        Modifier
-                            .fillMaxWidth()
-                            .height(48.dp),
-                        contentAlignment = Alignment.Center,
+    val listState = rememberLazyListState()
+    val lastTime = hours.lastOrNull()?.time?.let(::formatDateHourLabel) ?: "不明"
+    Column {
+        Text(
+            "${hours.size}時間分・$lastTime まで",
+            modifier = Modifier.padding(start = 48.dp, top = 8.dp, bottom = 2.dp),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 11.sp,
+        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(bottom = 10.dp),
+        ) {
+            Column(Modifier.width(48.dp)) {
+                ForecastTableLabel("日時", 42)
+                ForecastTableLabel("", 48)
+                ForecastTableLabel("気温", 30)
+                ForecastTableLabel("降水", 30)
+                ForecastTableLabel("雨量", 30)
+                ForecastTableLabel("湿度", 30)
+                ForecastTableLabel("風", 52)
+            }
+            LazyRow(
+                modifier = Modifier.weight(1f),
+                state = listState,
+            ) {
+                items(hours, key = { it.time }) { hour ->
+                    Column(
+                        Modifier.width(72.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        WeatherGlyph(code = hour.weatherCode, size = 36.dp)
+                        ForecastTimeValue(hour.time)
+                        Box(
+                            Modifier
+                                .fillMaxWidth()
+                                .height(48.dp),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            WeatherGlyph(code = hour.weatherCode, size = 36.dp)
+                        }
+                        ForecastTableValue("${hour.temperatureC?.roundText() ?: "--"}°", 30, 14, true)
+                        ForecastTableValue(hour.precipitationProbability.percentText(), 30, 13, false, WeatherPalette.Rain)
+                        ForecastTableValue(hour.precipitationMm.mmText(), 30, 12, false)
+                        ForecastTableValue(hour.humidityPercent.percentText(), 30, 12, false)
+                        ForecastWindValue(hour)
                     }
-                    ForecastTableValue("${hour.temperatureC?.roundText() ?: "--"}°", 30, 14, true)
-                    ForecastTableValue(hour.precipitationProbability.percentText(), 30, 13, false, WeatherPalette.Rain)
-                    ForecastTableValue(hour.precipitationMm.mmText(), 30, 12, false)
-                    ForecastTableValue(hour.humidityPercent.percentText(), 30, 12, false)
-                    ForecastWindValue(hour)
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ForecastTimeValue(time: String) {
+    val parsed = runCatching { LocalDateTime.parse(time) }.getOrNull()
+    val dateColor = when (parsed?.dayOfWeek) {
+        java.time.DayOfWeek.SATURDAY -> WeatherPalette.LowTemperature
+        java.time.DayOfWeek.SUNDAY -> WeatherPalette.HighTemperature
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .height(42.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            parsed?.format(DateTimeFormatter.ofPattern("M/d")) ?: "--",
+            color = dateColor,
+            fontSize = 10.sp,
+            maxLines = 1,
+        )
+        Text(
+            if (isCurrentHour(time)) "今" else formatHourOnly(time),
+            fontSize = 12.sp,
+            fontWeight = if (isCurrentHour(time)) FontWeight.Bold else FontWeight.Normal,
+            maxLines = 1,
+        )
     }
 }
 

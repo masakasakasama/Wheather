@@ -19,6 +19,7 @@ data class WeatherSnapshot(
     val daily: List<DailyWeather>,
     val updatedAtMillis: Long,
     val usedFallbackModel: Boolean = false,
+    val forecastSource: String = "Open-Meteo",
     val airQuality: AirQuality? = null,
 )
 

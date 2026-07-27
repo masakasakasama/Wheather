@@ -15,6 +15,13 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 
 ## これまでの作業内容
 
+- 2026-07-27 予報モデルの実測比較、時間別表示拡張、2×2ウィジェットを実装。
+  - 東京の気象庁観測点47662について、2026-06-15から2026-07-26までの実測41日分をOpen-Meteo Previous Runs APIの過去予報と比較。
+  - 最高気温MAEはBest Matchが1/3/5/7日前で1.46/1.95/2.02/2.74℃、JMA Seamlessが1.46/3.77/4.13/3.84℃。JMA Seamlessは3日後と5日後に約-3.7℃の低温バイアスがあった。
+  - 通常予報をOpen-Meteo Best Match優先へ変更し、取得失敗時だけJMA Seamlessを使う構成に変更。選択された予報元をキャッシュとホーム表示に追加。
+  - 時間別予報の固定48時間制限を廃止し、APIが返す最終時刻までを日付・時刻付きの単一横スクロール表で表示。`LazyRow`で長期間でも必要な列だけ描画。
+  - Jetpack Glanceに専用 `WeatherSquareWidget` とReceiverを追加し、ウィジェット選択画面で「個人天気（2×2）」として追加可能にした。
+  - 可変サイズ版と2×2版が同じDataStoreキャッシュを参照し、アプリ更新・WorkManager更新の両方で同時更新される。
 - 2026-07-27 Yahoo!天気の画面構成を参考にホームデザインを刷新。
   - ホームの独立した「直近3時間」カードは不要との要望により削除。`minutely_15`データ取得自体は通知判定等のため維持。
   - 今日/明日、時間タブの日付見出し、2週間一覧で、土曜の曜日を青、日曜の曜日を赤に変更。
@@ -52,9 +59,8 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
   - SharedPreferencesで同一内容の重複通知を抑制。
   - DataStoreに通知設定を保存し、ホームの設定から雨通知ON/OFF、判定時間、降水確率、雨量、重要気象情報通知ON/OFFを変更可能。
 - Open-Meteo Forecast APIクライアントを追加。
-  - `models=jma_seamless` を優先。
-  - 失敗時はmodels指定なしのbest matchへフォールバック。
-  - JMA Seamlessで降水確率が `null` の場合、models指定なしのbest matchから降水確率と降水量を補完。
+  - models指定なしのBest Matchを優先。
+  - 失敗時は `models=jma_seamless` へフォールバック。
   - current / minutely_15 / hourly / daily の指定項目を取得。
   - `minutely_15` で直近3時間の15分ごとの降水確率、降水量、天気、気温を取得。JMAで降水確率が欠損する場合はbest matchで補完。
   - 体感温度、湿度、風速、風向、気圧、UV、日の出/日の入を取得。
@@ -146,6 +152,7 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 - `app/src/main/res/drawable/ic_launcher.xml`
 - `app/src/main/res/layout/weather_widget_loading.xml`
 - `app/src/main/res/xml/weather_widget_info.xml`
+- `app/src/main/res/xml/weather_widget_square_info.xml`
 
 ### アプリ基盤
 
