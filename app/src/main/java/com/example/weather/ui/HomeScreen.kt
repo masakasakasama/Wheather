@@ -104,6 +104,7 @@ import com.example.weather.data.model.MinutelyWeather
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
+import com.example.weather.data.model.sameSavedPlaceAs
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.hasMeasurablePrecipitation
@@ -355,7 +356,7 @@ private fun HomeHeader(
             horizontalArrangement = Arrangement.spacedBy(5.dp),
         ) {
             items(savedLocations) { location ->
-                val selected = location.samePlaceAs(selectedLocation)
+                val selected = location.sameSavedPlaceAs(selectedLocation)
                 Row(
                     Modifier
                         .widthIn(min = 58.dp, max = 112.dp)
@@ -1977,7 +1978,7 @@ private fun LocationDialog(
                 items(state.savedLocations) { location ->
                     LocationRow(
                         location = location,
-                        selected = location.samePlaceAs(state.selectedLocation),
+                        selected = location.sameSavedPlaceAs(state.selectedLocation),
                         onSelect = { onSelectLocation(location) },
                         onMoveUp = { onMoveLocation(location, -1) },
                         onMoveDown = { onMoveLocation(location, 1) },
@@ -2596,9 +2597,4 @@ fun DailyWeather?.effectivePrecipitationSum(dayHours: List<HourlyWeather>): Doub
     val hourlyValues = dayHours.mapNotNull { it.precipitationMm }
     val hourlySum = hourlyValues.takeIf { it.isNotEmpty() }?.sum()
     return listOfNotNull(this?.precipitationSumMm, hourlySum).maxOrNull()
-}
-
-private fun WeatherLocation.samePlaceAs(other: WeatherLocation): Boolean {
-    return "%.4f".format(latitude) == "%.4f".format(other.latitude) &&
-        "%.4f".format(longitude) == "%.4f".format(other.longitude)
 }

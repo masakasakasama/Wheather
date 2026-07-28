@@ -10,6 +10,39 @@ data class WeatherLocation(
     val longitude: Double,
 )
 
+private const val DeviceLocationName = "現在地"
+
+fun WeatherLocation.isDeviceLocation(): Boolean = name == DeviceLocationName
+
+fun WeatherLocation.identityKey(): String {
+    if (isDeviceLocation()) return "device-location"
+    return "${latitude.coordinateKey()},${longitude.coordinateKey()}"
+}
+
+fun WeatherLocation.forecastAreaKey(): String {
+    return "${latitude.areaCoordinateKey()},${longitude.areaCoordinateKey()}"
+}
+
+fun WeatherLocation.sameSavedPlaceAs(other: WeatherLocation): Boolean = identityKey() == other.identityKey()
+
+fun List<WeatherLocation>.canonicalizedSavedLocations(): List<WeatherLocation> {
+    val canonical = mutableListOf<WeatherLocation>()
+    forEach { location ->
+        val existingIndex = canonical.indexOfFirst { it.sameSavedPlaceAs(location) }
+        if (existingIndex < 0) {
+            canonical += location
+        } else if (location.isDeviceLocation()) {
+            // Keep the original list position, but use the newest GPS coordinates.
+            canonical[existingIndex] = location
+        }
+    }
+    return canonical
+}
+
+private fun Double.coordinateKey(): Long = kotlin.math.round(this * 10_000.0).toLong()
+
+private fun Double.areaCoordinateKey(): Long = kotlin.math.round(this * 100.0).toLong()
+
 @Serializable
 data class WeatherSnapshot(
     val location: WeatherLocation,

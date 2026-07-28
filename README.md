@@ -40,6 +40,7 @@ gradle assembleDebug
 - 検索結果は保存地点より上に表示し、選択すると保存地点へ追加してその地点の予報を開きます。
 - 入力中の古いリクエストはキャンセルし、後から返った古い結果で現在の検索結果を上書きしません。
 - 0件と通信エラーを区別して表示します。例: `Heidelberg`、`Berlin`、`München`。
+- GPSの座標が更新されても「現在地」は保存リスト内の1件を最新座標へ置き換えます。旧バージョンで保存された複数の「現在地」は読み込み時に自動整理されます。
 
 - Open-Meteo Forecast API
   - `current`: `temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `weather_code`, `precipitation`, `wind_speed_10m`, `wind_direction_10m`, `pressure_msl`

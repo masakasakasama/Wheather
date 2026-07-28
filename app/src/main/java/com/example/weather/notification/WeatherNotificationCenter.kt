@@ -17,6 +17,7 @@ import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.forecastAreaKey
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.hasMeasurablePrecipitation
 import java.time.LocalDateTime
@@ -57,7 +58,8 @@ class WeatherNotificationCenter(
             (it.precipitationProbability ?: 0) >= settings.rainProbabilityThreshold ||
                 (it.precipitationMm ?: 0.0) >= amountThreshold
         } ?: return
-        val signature = "${rainHour.time}:${rainHour.precipitationProbability}:${rainHour.precipitationMm}"
+        val signature =
+            "${snapshot.location.forecastAreaKey()}:${rainHour.time}:${rainHour.precipitationProbability}:${rainHour.precipitationMm}"
         if (!shouldNotify("rain_signature", signature)) return
 
         val probability = rainHour.precipitationProbability?.let { "$it%" } ?: "--%"

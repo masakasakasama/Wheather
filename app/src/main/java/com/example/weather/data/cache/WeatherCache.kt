@@ -8,6 +8,7 @@ import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.canonicalizedSavedLocations
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -38,6 +39,7 @@ class WeatherCache(
         preferences[savedLocationsKey]
             ?.let { runCatching { json.decodeFromString<List<WeatherLocation>>(it) }.getOrNull() }
             ?.takeIf { it.isNotEmpty() }
+            ?.canonicalizedSavedLocations()
             ?: PresetLocations
     }
 
@@ -69,7 +71,7 @@ class WeatherCache(
 
     suspend fun saveLocations(locations: List<WeatherLocation>) {
         context.weatherDataStore.edit { preferences ->
-            preferences[savedLocationsKey] = json.encodeToString(locations.distinctBy { it.identityKey() })
+            preferences[savedLocationsKey] = json.encodeToString(locations.canonicalizedSavedLocations())
         }
     }
 
@@ -79,7 +81,3 @@ class WeatherCache(
         }
     }
 }
-
-fun WeatherLocation.identityKey(): String = "${latitude.formatKey()},${longitude.formatKey()}"
-
-private fun Double.formatKey(): String = "%.4f".format(this)

@@ -8,6 +8,7 @@ import com.example.weather.data.model.MinutelyWeather
 import com.example.weather.data.model.OpenMeteoResponse
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.identityKey
 import com.example.weather.data.model.toWeatherLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -53,7 +54,10 @@ class OpenMeteoClient(
                 throw IOException("Open-Meteo geocoding request failed: HTTP ${response.code}")
             }
             val body = response.body?.string() ?: throw IOException("Open-Meteo geocoding response was empty")
-            json.decodeFromString<GeocodingResponse>(body).results.map { it.toWeatherLocation() }
+            json.decodeFromString<GeocodingResponse>(body)
+                .results
+                .map { it.toWeatherLocation() }
+                .distinctBy { it.identityKey() }
         }
     }
 

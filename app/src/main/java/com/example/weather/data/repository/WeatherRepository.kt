@@ -5,13 +5,17 @@ import androidx.glance.appwidget.updateAll
 import com.example.weather.data.api.AirQualityClient
 import com.example.weather.data.api.OpenMeteoClient
 import com.example.weather.data.cache.WeatherCache
-import com.example.weather.data.cache.identityKey
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.canonicalizedSavedLocations
+import com.example.weather.data.model.identityKey
+import com.example.weather.data.model.isDeviceLocation
 import com.example.weather.widget.WeatherWidget
 import com.example.weather.widget.WeatherSquareWidget
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 class WeatherRepository(
     private val context: Context,
@@ -19,6 +23,8 @@ class WeatherRepository(
     private val airQualityClient: AirQualityClient,
     private val cache: WeatherCache,
 ) {
+    private val savedLocationsMutex = Mutex()
+
     val weather: Flow<WeatherSnapshot?> = cache.snapshot
     val selectedLocation: Flow<WeatherLocation> = cache.selectedLocation
     val savedLocations: Flow<List<WeatherLocation>> = cache.savedLocations
@@ -45,23 +51,30 @@ class WeatherRepository(
         addSavedLocation(location)
     }
 
-    suspend fun addSavedLocation(location: WeatherLocation) {
-        val current = cache.readSavedLocationsOnce()
-        if (current.any { it.identityKey() == location.identityKey() }) return
+    suspend fun addSavedLocation(location: WeatherLocation) = savedLocationsMutex.withLock {
+        val current = cache.readSavedLocationsOnce().canonicalizedSavedLocations()
+        val existingIndex = current.indexOfFirst { it.identityKey() == location.identityKey() }
+        if (existingIndex >= 0) {
+            if (location.isDeviceLocation() && current[existingIndex] != location) {
+                cache.saveLocations(current.toMutableList().apply { set(existingIndex, location) })
+            }
+            return@withLock
+        }
         cache.saveLocations(current + location)
     }
 
-    suspend fun moveLocation(location: WeatherLocation, direction: Int) {
+    suspend fun moveLocation(location: WeatherLocation, direction: Int) = savedLocationsMutex.withLock {
         val current = cache.readSavedLocationsOnce().toMutableList()
         val index = current.indexOfFirst { it.identityKey() == location.identityKey() }
+        if (index < 0) return@withLock
         val target = (index + direction).coerceIn(0, current.lastIndex)
-        if (index < 0 || index == target) return
+        if (index == target) return@withLock
         val item = current.removeAt(index)
         current.add(target, item)
         cache.saveLocations(current)
     }
 
-    suspend fun deleteLocation(location: WeatherLocation) {
+    suspend fun deleteLocation(location: WeatherLocation) = savedLocationsMutex.withLock {
         val current = cache.readSavedLocationsOnce()
         val next = current.filterNot { it.identityKey() == location.identityKey() }
         cache.saveLocations(next.ifEmpty { current.take(1) })
