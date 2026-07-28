@@ -48,13 +48,13 @@ class OpenMeteoClient(
             .url(url)
             .header("User-Agent", "PersonalWeather/1.0")
             .build()
-        runCatching {
-            httpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) return@use emptyList()
-                val body = response.body?.string().orEmpty()
-                json.decodeFromString<GeocodingResponse>(body).results.map { it.toWeatherLocation() }
+        httpClient.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                throw IOException("Open-Meteo geocoding request failed: HTTP ${response.code}")
             }
-        }.getOrDefault(emptyList())
+            val body = response.body?.string() ?: throw IOException("Open-Meteo geocoding response was empty")
+            json.decodeFromString<GeocodingResponse>(body).results.map { it.toWeatherLocation() }
+        }
     }
 
     private fun request(location: WeatherLocation, useJmaModel: Boolean): WeatherSnapshot? {

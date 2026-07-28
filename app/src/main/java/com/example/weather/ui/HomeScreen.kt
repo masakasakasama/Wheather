@@ -31,6 +31,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bolt
@@ -45,6 +47,7 @@ import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.WaterDrop
@@ -85,7 +88,9 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -1875,6 +1880,11 @@ private fun LocationDialog(
     onUseDeviceLocation: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
+    val submitSearch = {
+        onSearchLocations(query)
+        focusManager.clearFocus()
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("地点") },
@@ -1886,17 +1896,79 @@ private fun LocationDialog(
                 item {
                     OutlinedTextField(
                         value = query,
-                        onValueChange = {
-                            query = it
-                            onSearchLocations(it)
-                        },
+                        onValueChange = { query = it },
                         singleLine = true,
                         label = { Text("世界中の都市を検索") },
-                        placeholder = { Text("例: Seoul, London, New York") },
+                        placeholder = { Text("例: Heidelberg, Berlin, London") },
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                        keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
                         modifier = Modifier.fillMaxWidth(),
                     )
                 }
                 item {
+                    Button(
+                        onClick = submitSearch,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !state.isSearchingLocation,
+                    ) {
+                        if (state.isSearchingLocation) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("検索中")
+                        } else {
+                            Icon(Icons.Outlined.Search, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("検索")
+                        }
+                    }
+                }
+                state.locationSearchMessage?.let { message ->
+                    item {
+                        Text(
+                            message,
+                            color = if (state.searchResults.isEmpty()) {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            } else {
+                                MaterialTheme.colorScheme.primary
+                            },
+                            fontSize = 12.sp,
+                        )
+                    }
+                }
+                if (state.searchResults.isNotEmpty()) {
+                    item { Text("検索結果", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
+                    items(state.searchResults.take(8)) { location ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onSelectLocation(location) }
+                                .clip(MaterialTheme.shapes.small)
+                                .background(MaterialTheme.colorScheme.surfaceVariant)
+                                .padding(horizontal = 12.dp, vertical = 10.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                Text(location.name, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "${location.latitude.oneDecimal()}, ${location.longitude.oneDecimal()}",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    fontSize = 11.sp,
+                                )
+                            }
+                            Icon(
+                                Icons.Outlined.ChevronRight,
+                                contentDescription = "この地点を追加",
+                                tint = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+                item {
+                    HorizontalDivider()
                     TextButton(onClick = onUseDeviceLocation) { Text("現在地を使う") }
                 }
                 item {
@@ -1912,23 +1984,8 @@ private fun LocationDialog(
                         onDelete = { onDeleteLocation(location) },
                     )
                 }
-                item { HorizontalDivider() }
-                if (state.isSearchingLocation) {
-                    item { Text("検索中...", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                }
-                if (state.searchResults.isNotEmpty()) {
-                    item { Text("検索結果", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp) }
-                    items(state.searchResults.take(8)) { location ->
-                        Text(
-                            text = location.name,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onSelectLocation(location) }
-                                .padding(vertical = 8.dp),
-                        )
-                    }
-                }
                 item {
+                    HorizontalDivider()
                     Text("プリセット", color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

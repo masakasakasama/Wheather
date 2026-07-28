@@ -62,6 +62,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -130,6 +131,8 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     private val locationProvider = LocationProvider(application)
     private val _uiState = MutableStateFlow(WeatherUiState())
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
+    private var locationSearchJob: Job? = null
+    private var locationSearchSequence = 0
 
     init {
         viewModelScope.launch {
@@ -175,7 +178,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     fun selectLocation(location: WeatherLocation) {
         viewModelScope.launch {
             repository.saveLocation(location)
-            _uiState.update { it.copy(searchResults = emptyList()) }
+            _uiState.update { it.copy(searchResults = emptyList(), locationSearchMessage = null) }
             refresh(location)
         }
     }
@@ -199,23 +202,49 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun searchLocations(query: String) {
-        viewModelScope.launch {
-            val normalized = query.trim()
-            if (normalized.length < 2) {
-                _uiState.update { it.copy(searchResults = emptyList(), isSearchingLocation = false) }
-                return@launch
+        val normalized = query.trim()
+        locationSearchJob?.cancel()
+        val sequence = ++locationSearchSequence
+        if (normalized.length < 2) {
+            _uiState.update {
+                it.copy(
+                    searchResults = emptyList(),
+                    isSearchingLocation = false,
+                    locationSearchMessage = "都市名を2文字以上入力してください",
+                )
             }
-            _uiState.update { it.copy(isSearchingLocation = true) }
+            return
+        }
+        locationSearchJob = viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    searchResults = emptyList(),
+                    isSearchingLocation = true,
+                    locationSearchMessage = null,
+                )
+            }
             repository.searchLocations(normalized)
                 .onSuccess { results ->
-                    _uiState.update { it.copy(searchResults = results, isSearchingLocation = false) }
+                    if (sequence != locationSearchSequence) return@onSuccess
+                    _uiState.update {
+                        it.copy(
+                            searchResults = results,
+                            isSearchingLocation = false,
+                            locationSearchMessage = if (results.isEmpty()) {
+                                "「$normalized」は見つかりません。綴りや言語を変えてください"
+                            } else {
+                                "${results.size}件見つかりました"
+                            },
+                        )
+                    }
                 }
                 .onFailure {
+                    if (sequence != locationSearchSequence) return@onFailure
                     _uiState.update {
                         it.copy(
                             searchResults = emptyList(),
                             isSearchingLocation = false,
-                            errorMessage = "地点検索に失敗しました。",
+                            locationSearchMessage = "検索できませんでした。通信状態を確認して再試行してください",
                         )
                     }
                 }
@@ -321,6 +350,7 @@ data class WeatherUiState(
     val selectedLocation: WeatherLocation = PresetLocations.first(),
     val savedLocations: List<WeatherLocation> = PresetLocations,
     val searchResults: List<WeatherLocation> = emptyList(),
+    val locationSearchMessage: String? = null,
     val updateInfo: AppUpdateInfo? = null,
     val disasterSummary: DisasterSummary? = null,
     val notificationSettings: NotificationSettings = NotificationSettings(),

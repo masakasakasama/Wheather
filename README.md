@@ -34,6 +34,13 @@ gradle assembleDebug
 
 ## 実装内容
 
+### 世界の地点検索
+
+- 地点ダイアログから日本語または現地語・英語の都市名を入力し、検索ボタンまたはキーボードの検索キーでOpen-Meteo Geocoding APIを検索します。
+- 検索結果は保存地点より上に表示し、選択すると保存地点へ追加してその地点の予報を開きます。
+- 入力中の古いリクエストはキャンセルし、後から返った古い結果で現在の検索結果を上書きしません。
+- 0件と通信エラーを区別して表示します。例: `Heidelberg`、`Berlin`、`München`。
+
 - Open-Meteo Forecast API
   - `current`: `temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `weather_code`, `precipitation`, `wind_speed_10m`, `wind_direction_10m`, `pressure_msl`
   - `minutely_15`: `temperature_2m`, `precipitation_probability`, `weather_code`, `precipitation`
