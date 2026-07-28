@@ -19,7 +19,6 @@ import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
-import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -120,6 +119,7 @@ private fun WeatherSquareWidgetContent(snapshot: WeatherSnapshot?) {
 
     val compact = size.height < 135.dp
     val days = snapshot.daily.take(2)
+    val dayWidth = ((size.width.value - 18f) / 2f).dp
     Column(
         modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -141,7 +141,7 @@ private fun WeatherSquareWidgetContent(snapshot: WeatherSnapshot?) {
                     low = day.minTemperatureC,
                     probability = day.effectiveMaxProbability(dayHours),
                     compact = compact,
-                    modifier = GlanceModifier.defaultWeight(),
+                    modifier = GlanceModifier.width(dayWidth),
                 )
             }
         }
