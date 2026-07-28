@@ -52,4 +52,23 @@ class WeatherLocationTest {
         assertEquals(first.forecastAreaKey(), jittered.forecastAreaKey())
         assertFalse(first.forecastAreaKey() == osaka.forecastAreaKey())
     }
+
+    @Test
+    fun widgetForecastMustMatchTheConfiguredLocation() {
+        val berlin = WeatherLocation("ベルリン", 52.5244, 13.4105)
+        val osaka = WeatherLocation("大阪", 34.6937, 135.5023)
+
+        assertTrue(berlin.sameForecastPlaceAs(berlin.copy()))
+        assertFalse(berlin.sameForecastPlaceAs(osaka))
+    }
+
+    @Test
+    fun deviceForecastAllowsGpsJitterButNotAChangedArea() {
+        val first = WeatherLocation("現在地", 35.6812, 139.7671)
+        val jittered = WeatherLocation("現在地", 35.6813, 139.7672)
+        val moved = WeatherLocation("現在地", 34.6937, 135.5023)
+
+        assertTrue(first.sameForecastPlaceAs(jittered))
+        assertFalse(first.sameForecastPlaceAs(moved))
+    }
 }

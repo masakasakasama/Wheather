@@ -25,6 +25,14 @@ fun WeatherLocation.forecastAreaKey(): String {
 
 fun WeatherLocation.sameSavedPlaceAs(other: WeatherLocation): Boolean = identityKey() == other.identityKey()
 
+fun WeatherLocation.sameForecastPlaceAs(other: WeatherLocation): Boolean {
+    return if (isDeviceLocation() && other.isDeviceLocation()) {
+        forecastAreaKey() == other.forecastAreaKey()
+    } else {
+        sameSavedPlaceAs(other)
+    }
+}
+
 fun List<WeatherLocation>.canonicalizedSavedLocations(): List<WeatherLocation> {
     val canonical = mutableListOf<WeatherLocation>()
     forEach { location ->

@@ -9,6 +9,7 @@ import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.canonicalizedSavedLocations
+import com.example.weather.data.model.sameForecastPlaceAs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -16,6 +17,11 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 private val Context.weatherDataStore by preferencesDataStore(name = "weather")
+
+data class WidgetWeatherState(
+    val selectedLocation: WeatherLocation,
+    val snapshot: WeatherSnapshot?,
+)
 
 class WeatherCache(
     private val context: Context,
@@ -50,6 +56,16 @@ class WeatherCache(
     }
 
     suspend fun readSnapshotOnce(): WeatherSnapshot? = snapshot.first()
+
+    suspend fun readWidgetWeatherOnce(): WidgetWeatherState = context.weatherDataStore.data.map { preferences ->
+        val selected = preferences[locationKey]
+            ?.let { runCatching { json.decodeFromString<WeatherLocation>(it) }.getOrNull() }
+            ?: PresetLocations.first()
+        val matchingSnapshot = preferences[snapshotKey]
+            ?.let { runCatching { json.decodeFromString<WeatherSnapshot>(it) }.getOrNull() }
+            ?.takeIf { it.location.sameForecastPlaceAs(selected) }
+        WidgetWeatherState(selected, matchingSnapshot)
+    }.first()
 
     suspend fun readLocationOnce(): WeatherLocation = selectedLocation.first()
 

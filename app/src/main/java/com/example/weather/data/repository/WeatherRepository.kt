@@ -11,6 +11,7 @@ import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.canonicalizedSavedLocations
 import com.example.weather.data.model.identityKey
 import com.example.weather.data.model.isDeviceLocation
+import com.example.weather.data.model.sameForecastPlaceAs
 import com.example.weather.widget.WeatherWidget
 import com.example.weather.widget.WeatherSquareWidget
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +31,10 @@ class WeatherRepository(
     val savedLocations: Flow<List<WeatherLocation>> = cache.savedLocations
     val notificationSettings: Flow<NotificationSettings> = cache.notificationSettings
 
+    suspend fun selectedLocationOnce(): WeatherLocation = cache.readLocationOnce()
+
+    suspend fun cachedWeatherOnce(): WeatherSnapshot? = cache.readSnapshotOnce()
+
     suspend fun refresh(): Result<WeatherSnapshot> = refresh(cache.readLocationOnce())
 
     suspend fun refresh(location: WeatherLocation): Result<WeatherSnapshot> {
@@ -38,10 +43,12 @@ class WeatherRepository(
             val snapshot = forecast.copy(
                 airQuality = airQualityClient.fetchAirQuality(location),
             )
-            saveLocation(location)
+            val selectedLocation = cache.readLocationOnce()
+            check(location.sameForecastPlaceAs(selectedLocation)) {
+                "Selected location changed while weather was loading"
+            }
             cache.saveSnapshot(snapshot)
-            WeatherWidget().updateAll(context)
-            WeatherSquareWidget().updateAll(context)
+            updateWidgets()
             snapshot
         }
     }
@@ -49,6 +56,7 @@ class WeatherRepository(
     suspend fun saveLocation(location: WeatherLocation) {
         cache.saveLocation(location)
         addSavedLocation(location)
+        updateWidgets()
     }
 
     suspend fun addSavedLocation(location: WeatherLocation) = savedLocationsMutex.withLock {
@@ -74,12 +82,18 @@ class WeatherRepository(
         cache.saveLocations(current)
     }
 
-    suspend fun deleteLocation(location: WeatherLocation) = savedLocationsMutex.withLock {
+    suspend fun deleteLocation(location: WeatherLocation): WeatherLocation? = savedLocationsMutex.withLock {
         val current = cache.readSavedLocationsOnce()
         val next = current.filterNot { it.identityKey() == location.identityKey() }
         cache.saveLocations(next.ifEmpty { current.take(1) })
-        if (cache.readLocationOnce().identityKey() == location.identityKey()) {
-            cache.saveLocation(next.firstOrNull() ?: current.first())
+        val selected = cache.readLocationOnce()
+        if (selected.identityKey() == location.identityKey()) {
+            val replacement = next.firstOrNull() ?: current.first()
+            cache.saveLocation(replacement)
+            updateWidgets()
+            replacement
+        } else {
+            null
         }
     }
 
@@ -95,5 +109,10 @@ class WeatherRepository(
 
     suspend fun searchLocations(query: String): Result<List<WeatherLocation>> {
         return runCatching { openMeteoClient.searchLocations(query) }
+    }
+
+    private suspend fun updateWidgets() {
+        WeatherWidget().updateAll(context)
+        WeatherSquareWidget().updateAll(context)
     }
 }

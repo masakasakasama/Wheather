@@ -48,6 +48,7 @@ import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.sameForecastPlaceAs
 import com.example.weather.location.LocationProvider
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
@@ -133,6 +134,8 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     val uiState: StateFlow<WeatherUiState> = _uiState.asStateFlow()
     private var locationSearchJob: Job? = null
     private var locationSearchSequence = 0
+    private var weatherRefreshJob: Job? = null
+    private var weatherRefreshSequence = 0
 
     init {
         viewModelScope.launch {
@@ -146,7 +149,9 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             }.collect { bundle ->
                 _uiState.update {
                     it.copy(
-                        snapshot = bundle.weather,
+                        snapshot = bundle.weather?.takeIf {
+                            it.location.sameForecastPlaceAs(bundle.location)
+                        },
                         selectedLocation = bundle.location,
                         savedLocations = bundle.savedLocations,
                         notificationSettings = bundle.notificationSettings,
@@ -164,11 +169,24 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun refreshOnLaunch() {
-        if (uiState.value.snapshot == null) refreshUsingDeviceLocation() else refreshSelected()
+        viewModelScope.launch {
+            val cachedWeather = repository.cachedWeatherOnce()
+            if (cachedWeather == null) {
+                val initialLocation = locationProvider.currentOrDefault()
+                repository.saveLocation(initialLocation)
+                refresh(initialLocation)
+            } else {
+                refresh(repository.selectedLocationOnce())
+            }
+        }
     }
 
     fun refreshUsingDeviceLocation() {
-        refresh(locationProvider.currentOrDefault())
+        val location = locationProvider.currentOrDefault()
+        viewModelScope.launch {
+            repository.saveLocation(location)
+            refresh(location)
+        }
     }
 
     fun refreshSelected() {
@@ -191,7 +209,9 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 
     fun deleteLocation(location: WeatherLocation) {
         viewModelScope.launch {
-            repository.deleteLocation(location)
+            repository.deleteLocation(location)?.let { replacement ->
+                refresh(replacement)
+            }
         }
     }
 
@@ -313,14 +333,23 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     }
 
     private fun refresh(location: WeatherLocation) {
-        viewModelScope.launch {
+        weatherRefreshJob?.cancel()
+        val sequence = ++weatherRefreshSequence
+        weatherRefreshJob = viewModelScope.launch {
             _uiState.update { it.copy(isRefreshing = true, errorMessage = null) }
             repository.refresh(location)
                 .onFailure { error ->
+                    if (sequence != weatherRefreshSequence) return@onFailure
                     _uiState.update {
-                        it.copy(errorMessage = "更新できませんでした。最後に成功したデータを表示します。${error.message.orEmpty()}")
+                        val message = if (it.snapshot != null) {
+                            "更新できませんでした。最後に成功したこの地点のデータを表示します。"
+                        } else {
+                            "この地点の天気を取得できませんでした。"
+                        }
+                        it.copy(errorMessage = message + error.message.orEmpty())
                     }
                 }
+            if (sequence != weatherRefreshSequence) return@launch
             refreshDisaster(location)
             _uiState.update { it.copy(isRefreshing = false) }
         }

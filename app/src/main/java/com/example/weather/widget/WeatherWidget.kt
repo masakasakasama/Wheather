@@ -52,9 +52,9 @@ class WeatherWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         AppServices.init(context)
-        val snapshot = AppServices.cache.readSnapshotOnce()
+        val weather = AppServices.cache.readWidgetWeatherOnce()
         provideContent {
-            WeatherWidgetContent(snapshot)
+            WeatherWidgetContent(weather.selectedLocation.name, weather.snapshot)
         }
     }
 }
@@ -68,9 +68,9 @@ class WeatherSquareWidget : GlanceAppWidget() {
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         AppServices.init(context)
-        val snapshot = AppServices.cache.readSnapshotOnce()
+        val weather = AppServices.cache.readWidgetWeatherOnce()
         provideContent {
-            WeatherSquareWidgetContent(snapshot)
+            WeatherSquareWidgetContent(weather.selectedLocation.name, weather.snapshot)
         }
     }
 }
@@ -80,7 +80,7 @@ class WeatherSquareWidgetReceiver : GlanceAppWidgetReceiver() {
 }
 
 @androidx.compose.runtime.Composable
-private fun WeatherWidgetContent(snapshot: WeatherSnapshot?) {
+private fun WeatherWidgetContent(selectedLocationName: String, snapshot: WeatherSnapshot?) {
     val size = LocalSize.current
     val modifier = GlanceModifier
         .fillMaxSize()
@@ -89,7 +89,7 @@ private fun WeatherWidgetContent(snapshot: WeatherSnapshot?) {
         .padding(12.dp)
 
     when {
-        snapshot == null -> EmptyWidget(modifier)
+        snapshot == null -> EmptyWidget(selectedLocationName, modifier)
         size.width < 180.dp -> SmallWidget(snapshot, modifier)
         size.height < 160.dp -> MediumWidget(snapshot, modifier)
         else -> LargeWidget(snapshot, modifier)
@@ -97,16 +97,16 @@ private fun WeatherWidgetContent(snapshot: WeatherSnapshot?) {
 }
 
 @androidx.compose.runtime.Composable
-private fun EmptyWidget(modifier: GlanceModifier) {
+private fun EmptyWidget(selectedLocationName: String, modifier: GlanceModifier) {
     Column(modifier, verticalAlignment = Alignment.CenterVertically) {
-        Text("個人天気", style = widgetText(15, bold = true))
+        Text("📍 ${selectedLocationName.substringBefore(" (")}", style = widgetText(15, bold = true), maxLines = 1)
         Spacer(GlanceModifier.height(6.dp))
-        Text("アプリを開いて更新", style = widgetText(11, muted = true))
+        Text("この地点の天気を取得中", style = widgetText(11, muted = true))
     }
 }
 
 @androidx.compose.runtime.Composable
-private fun WeatherSquareWidgetContent(snapshot: WeatherSnapshot?) {
+private fun WeatherSquareWidgetContent(selectedLocationName: String, snapshot: WeatherSnapshot?) {
     val size = LocalSize.current
     val modifier = GlanceModifier
         .fillMaxSize()
@@ -114,7 +114,7 @@ private fun WeatherSquareWidgetContent(snapshot: WeatherSnapshot?) {
         .clickable(actionStartActivity<MainActivity>())
         .padding(horizontal = 9.dp, vertical = 7.dp)
     if (snapshot == null) {
-        EmptyWidget(modifier)
+        EmptyWidget(selectedLocationName, modifier)
         return
     }
 
@@ -213,13 +213,17 @@ private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
         snapshot.hourly.filter { it.time.take(10) == day.date }
     }.orEmpty()
     Column(modifier) {
+        Text(
+            "📍 ${snapshot.location.name.substringBefore(" (")}",
+            style = widgetText(10, muted = true),
+            maxLines = 1,
+        )
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(28, bold = true))
             Spacer(GlanceModifier.width(8.dp))
             Text(weatherIcon(snapshot.current.weatherCode), style = widgetText(18))
         }
         Text("降水 ${today.effectiveMaxProbability(todayHours).percentText()} / ${today.effectivePrecipitationSum(todayHours).mmText()}", style = widgetText(12, muted = true))
-        Text("AQI ${snapshot.airQuality?.europeanAqi?.toString() ?: "--"}", style = widgetText(11, muted = true), maxLines = 1)
         Text(nextRainText(snapshot), style = widgetText(11, muted = true), maxLines = 1)
     }
 }
@@ -229,6 +233,15 @@ private fun MediumWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
     val hours = snapshot.hourly.nextHours(6, snapshot.timezone)
     Column(modifier) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "📍 ${snapshot.location.name.substringBefore(" (")}",
+                style = widgetText(11, bold = true),
+                maxLines = 1,
+            )
+            Spacer(GlanceModifier.width(8.dp))
+            Text("更新 ${formatHourMinute(snapshot.updatedAtMillis)}", style = widgetText(9, muted = true))
+        }
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(32, bold = true))
             Spacer(GlanceModifier.width(10.dp))
             Text("H ${snapshot.today()?.maxTemperatureC?.roundText() ?: "--"}° / L ${snapshot.today()?.minTemperatureC?.roundText() ?: "--"}° / AQI ${snapshot.airQuality?.europeanAqi?.toString() ?: "--"}", style = widgetText(12, muted = true))
@@ -236,7 +249,6 @@ private fun MediumWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
         Spacer(GlanceModifier.height(6.dp))
         Text(hours.joinToString(" ") { it.precipitationProbability.percentText() }, style = widgetText(12))
         Text(hours.joinToString(" ") { "${it.temperatureC?.roundText() ?: "--"}°" }, style = widgetText(12, muted = true))
-        Text("更新 ${formatHourMinute(snapshot.updatedAtMillis)}", style = widgetText(10, muted = true))
     }
 }
 
