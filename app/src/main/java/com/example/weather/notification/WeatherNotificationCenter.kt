@@ -19,7 +19,10 @@ import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.forecastAreaKey
 import com.example.weather.data.model.forecastZoneId
+import com.example.weather.data.model.freshRadarPrecipitation
 import com.example.weather.data.model.hasMeasurablePrecipitation
+import com.example.weather.data.model.intensityLabel
+import com.example.weather.data.model.isRaining
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -53,6 +56,18 @@ class WeatherNotificationCenter(
     }
 
     private fun notifyRainIfNeeded(snapshot: WeatherSnapshot, settings: NotificationSettings) {
+        val radar = snapshot.freshRadarPrecipitation()
+        if (radar?.isRaining() == true) {
+            val signature =
+                "${snapshot.location.forecastAreaKey()}:radar:${radar.observedAtMillis}:${radar.intensityLowerBoundMmPerHour}"
+            if (!shouldNotify("rain_signature", signature)) return
+            show(
+                id = NOTIFICATION_RAIN,
+                title = radar.intensityLabel(),
+                text = "${snapshot.location.name.substringBefore(" (")}周辺のレーダー雨量 ${"%.1f".format(radar.intensityLowerBoundMmPerHour)}mm/h以上",
+            )
+            return
+        }
         val amountThreshold = settings.rainAmountThresholdMm.coerceAtLeast(0.1)
         val rainHour = snapshot.hourly.nextNotificationHours(settings.rainLookAheadHours, snapshot).firstOrNull {
             (it.precipitationProbability ?: 0) >= settings.rainProbabilityThreshold ||

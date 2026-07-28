@@ -4,6 +4,7 @@ import java.time.LocalDateTime
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class PrecipitationRulesTest {
     private val now = LocalDateTime.parse("2026-07-28T10:15")
@@ -50,16 +51,75 @@ class PrecipitationRulesTest {
         assertEquals(100, snapshot.maxPrecipitationProbabilityFromNow(now = now))
     }
 
+    @Test
+    fun freshRadarRainOverridesDryForecastCurrentValue() {
+        val observedAt = 1_000_000L
+        val snapshot = snapshot(
+            minutely = emptyList(),
+            hourly = emptyList(),
+            radar = RadarPrecipitation(50.0, observedAt),
+        )
+
+        val radar = snapshot.freshRadarPrecipitation(nowMillis = observedAt + 60_000)
+        val result = snapshot.nextExpectedPrecipitation(now = now, nowMillis = observedAt + 60_000)
+
+        assertEquals(50.0, radar?.intensityLowerBoundMmPerHour)
+        assertTrue(radar?.isRaining() == true)
+        assertEquals("非常に激しい雨", radar?.intensityLabel())
+        assertEquals(50.0, result?.radarPrecipitation?.intensityLowerBoundMmPerHour)
+        assertTrue(result?.isCurrent == true)
+    }
+
+    @Test
+    fun freshRadarNoRainOverridesModelCurrentRain() {
+        val observedAt = 1_000_000L
+        val snapshot = snapshot(
+            minutely = emptyList(),
+            hourly = emptyList(),
+            radar = RadarPrecipitation(0.0, observedAt),
+            currentAmount = 5.0,
+        )
+
+        assertNull(
+            snapshot.nextExpectedPrecipitation(
+                now = now,
+                nowMillis = observedAt + 60_000,
+            ),
+        )
+    }
+
+    @Test
+    fun staleRadarFallsBackToModelCurrentRain() {
+        val observedAt = 1_000_000L
+        val snapshot = snapshot(
+            minutely = emptyList(),
+            hourly = emptyList(),
+            radar = RadarPrecipitation(0.0, observedAt),
+            currentAmount = 5.0,
+        )
+
+        val result = snapshot.nextExpectedPrecipitation(
+            now = now,
+            nowMillis = observedAt + 16 * 60_000,
+        )
+
+        assertTrue(result?.isCurrent == true)
+        assertEquals(5.0, result?.amountMm)
+    }
+
     private fun snapshot(
         minutely: List<MinutelyWeather>,
         hourly: List<HourlyWeather>,
+        radar: RadarPrecipitation? = null,
+        currentAmount: Double = 0.0,
     ) = WeatherSnapshot(
         location = WeatherLocation("テスト", 35.0, 139.0),
-        current = CurrentWeather(null, weatherCode = 0, precipitationMm = 0.0, time = "2026-07-28T10:15"),
+        current = CurrentWeather(null, weatherCode = 0, precipitationMm = currentAmount, time = "2026-07-28T10:15"),
         minutely15 = minutely,
         hourly = hourly,
         daily = emptyList(),
         updatedAtMillis = 0L,
+        radarPrecipitation = radar,
     )
 
     private fun minute(time: String, probability: Int, amount: Double) =

@@ -31,6 +31,8 @@ import androidx.glance.unit.ColorProvider
 import com.example.weather.AppServices
 import com.example.weather.MainActivity
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.freshRadarPrecipitation
+import com.example.weather.data.model.isRaining
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
 import com.example.weather.data.model.weatherLabel
@@ -212,6 +214,11 @@ private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
     val todayHours = today?.let { day ->
         snapshot.hourly.filter { it.time.take(10) == day.date }
     }.orEmpty()
+    val currentWeatherCode = if (snapshot.freshRadarPrecipitation()?.isRaining() == true) {
+        65
+    } else {
+        snapshot.current.weatherCode
+    }
     Column(modifier) {
         Text(
             "📍 ${snapshot.location.name.substringBefore(" (")}",
@@ -221,7 +228,7 @@ private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(28, bold = true))
             Spacer(GlanceModifier.width(8.dp))
-            Text(weatherIcon(snapshot.current.weatherCode), style = widgetText(18))
+            Text(weatherIcon(currentWeatherCode), style = widgetText(18))
         }
         Text("降水 ${today.effectiveMaxProbability(todayHours).percentText()} / ${today.effectivePrecipitationSum(todayHours).mmText()}", style = widgetText(12, muted = true))
         Text(nextRainText(snapshot), style = widgetText(11, muted = true), maxLines = 1)

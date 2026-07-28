@@ -109,7 +109,13 @@ class MainActivity : ComponentActivity() {
                     state = state,
                     appVersionName = BuildConfig.VERSION_NAME,
                     onRefresh = viewModel::refreshSelected,
-                    onUseDeviceLocation = viewModel::refreshUsingDeviceLocation,
+                    onUseDeviceLocation = {
+                        if (viewModel.needsPermissionPrompt()) {
+                            permissionLauncher.launch(locationPermissions())
+                        } else {
+                            viewModel.refreshUsingDeviceLocation()
+                        }
+                    },
                     onSelectLocation = viewModel::selectLocation,
                     onSearchLocations = viewModel::searchLocations,
                     onMoveLocation = viewModel::moveLocation,
@@ -364,15 +370,17 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 }
 
 private fun initialPermissions(): Array<String> {
-    val permissions = mutableListOf(
-        Manifest.permission.ACCESS_FINE_LOCATION,
-        Manifest.permission.ACCESS_COARSE_LOCATION,
-    )
+    val permissions = locationPermissions().toMutableList()
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         permissions += Manifest.permission.POST_NOTIFICATIONS
     }
     return permissions.toTypedArray()
 }
+
+private fun locationPermissions(): Array<String> = arrayOf(
+    Manifest.permission.ACCESS_FINE_LOCATION,
+    Manifest.permission.ACCESS_COARSE_LOCATION,
+)
 
 data class WeatherUiState(
     val snapshot: WeatherSnapshot? = null,

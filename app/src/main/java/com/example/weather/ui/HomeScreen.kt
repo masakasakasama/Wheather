@@ -45,6 +45,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Air
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
@@ -106,8 +107,11 @@ import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.sameSavedPlaceAs
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.freshRadarPrecipitation
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.hasMeasurablePrecipitation
+import com.example.weather.data.model.intensityLabel
+import com.example.weather.data.model.isRaining
 import com.example.weather.data.model.maxPrecipitationProbabilityFromNow
 import com.example.weather.data.model.nextExpectedPrecipitation
 import com.example.weather.data.model.today
@@ -158,6 +162,7 @@ fun HomeScreen(
                 freshness = formatFreshness(snapshot?.updatedAtMillis),
                 isRefreshing = state.isRefreshing,
                 onRefresh = onRefresh,
+                onUseDeviceLocation = onUseDeviceLocation,
                 onLocation = { showLocationDialog = true },
                 onSettings = { showSettingsDialog = true },
                 onSelectLocation = onSelectLocation,
@@ -262,6 +267,7 @@ private fun HomeHeader(
     freshness: String,
     isRefreshing: Boolean,
     onRefresh: () -> Unit,
+    onUseDeviceLocation: () -> Unit,
     onLocation: () -> Unit,
     onSettings: () -> Unit,
     onSelectLocation: (WeatherLocation) -> Unit,
@@ -307,6 +313,16 @@ private fun HomeHeader(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
+                FilledTonalIconButton(
+                    onClick = onUseDeviceLocation,
+                    modifier = Modifier.size(38.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = WeatherPalette.Rain,
+                    ),
+                ) {
+                    Icon(Icons.Outlined.MyLocation, contentDescription = "現在地に戻る", modifier = Modifier.size(21.dp))
+                }
                 FilledTonalIconButton(
                     onClick = onRefresh,
                     enabled = !isRefreshing,
@@ -1074,7 +1090,14 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
     val remainingToday = today?.let { day -> next48Hours.filter { it.time.take(10) == day.date } }.orEmpty()
     val remainingProbability = remainingToday.mapNotNull { it.precipitationProbability }.maxOrNull()
     val remainingAmount = remainingToday.mapNotNull { it.precipitationMm }.takeIf { it.isNotEmpty() }?.sum()
-    val rainSignal = rainSignal(remainingProbability, remainingAmount)
+    val radarPrecipitation = snapshot.freshRadarPrecipitation()
+    val radarIsRaining = radarPrecipitation?.isRaining() == true
+    val currentWeatherCode = if (radarIsRaining) 65 else snapshot.current.weatherCode
+    val rainSignal = if (radarIsRaining) {
+        rainSignal(100, radarPrecipitation?.intensityLowerBoundMmPerHour)
+    } else {
+        rainSignal(remainingProbability, remainingAmount)
+    }
     val comfort = comfortSignal(snapshot, today, next48Hours)
     val trend = temperatureTrendLabel(next48Hours)
     val isNight = remember(snapshot) { isNightNow(snapshot) }
@@ -1082,7 +1105,7 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
         Modifier
             .fillMaxWidth()
             .clip(MaterialTheme.shapes.large)
-            .background(skyGradient(snapshot.current.weatherCode, isNight))
+            .background(skyGradient(currentWeatherCode, isNight))
             .padding(22.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
@@ -1101,10 +1124,16 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
                 )
             }
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(weatherIcon(snapshot.current.weatherCode), fontSize = 56.sp)
-                Text(weatherLabel(snapshot.current.weatherCode), fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Color.White)
+                Text(weatherIcon(currentWeatherCode), fontSize = 56.sp)
                 Text(
-                    "現在 ${snapshot.current.precipitationMm?.oneDecimal() ?: "--"}mm",
+                    radarPrecipitation?.takeIf { it.isRaining() }?.intensityLabel()
+                        ?: weatherLabel(snapshot.current.weatherCode),
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color.White,
+                )
+                Text(
+                    currentPrecipitationText(snapshot),
                     color = Color.White.copy(alpha = 0.78f),
                     fontSize = 13.sp,
                 )
@@ -2100,7 +2129,9 @@ fun nextRainText(snapshot: WeatherSnapshot): String {
     val expected = snapshot.nextExpectedPrecipitation(maxHours = 48)
     if (expected != null) {
         return if (expected.isCurrent) {
-            "現在、雨が降っています（${expected.amountMm.mmText()}）"
+            expected.radarPrecipitation?.let { radar ->
+                "現在、${radar.intensityLabel()}（レーダー ${radar.intensityLowerBoundMmPerHour.oneDecimal()}mm/h以上）"
+            } ?: "現在、雨が降っています（${expected.amountMm.mmText()}）"
         } else {
             "${formatDateMinuteLabel(expected.time)}ごろから雨予報（${expected.amountMm.mmText()}）"
         }
@@ -2112,6 +2143,16 @@ fun nextRainText(snapshot: WeatherSnapshot): String {
         !hasAmountData -> "48時間の雨量データなし${maxProbability?.let { "（確率最大$it%）" }.orEmpty()}"
         maxProbability != null -> "48時間の予想雨量は0.0mm（確率最大$maxProbability%）"
         else -> "48時間の雨予報はありません"
+    }
+}
+
+fun currentPrecipitationText(snapshot: WeatherSnapshot): String {
+    val radar = snapshot.freshRadarPrecipitation()
+    return when {
+        radar?.isRaining() == true ->
+            "レーダー ${radar.intensityLowerBoundMmPerHour.oneDecimal()}mm/h以上・${formatHourMinute(radar.observedAtMillis)}"
+        radar != null -> "レーダー 降雨なし・${formatHourMinute(radar.observedAtMillis)}"
+        else -> "予報 ${snapshot.current.precipitationMm?.oneDecimal() ?: "--"}mm"
     }
 }
 
@@ -2295,7 +2336,9 @@ fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>
             label = "傘",
             value = "持つ",
             detail = if (nextRain.isCurrent) {
-                "現在降水 ${nextRain.amountMm.mmText()}"
+                nextRain.radarPrecipitation?.let {
+                    "現在 ${it.intensityLabel()} ${it.intensityLowerBoundMmPerHour.oneDecimal()}mm/h以上"
+                } ?: "現在降水 ${nextRain.amountMm.mmText()}"
             } else {
                 "${formatDateMinuteLabel(nextRain.time)}ごろ ${nextRain.probability.percentText()} / ${nextRain.amountMm.mmText()}"
             },

@@ -63,6 +63,7 @@ data class WeatherSnapshot(
     val forecastSource: String = "Open-Meteo",
     val timezone: String = "Asia/Tokyo",
     val airQuality: AirQuality? = null,
+    val radarPrecipitation: RadarPrecipitation? = null,
 )
 
 @Serializable
@@ -252,6 +253,12 @@ data class RadarFrame(
     val baseTime: String,
     val validTime: String,
     val tileTemplate: String,
+)
+
+@Serializable
+data class RadarPrecipitation(
+    val intensityLowerBoundMmPerHour: Double,
+    val observedAtMillis: Long,
 )
 
 val PresetLocations = listOf(

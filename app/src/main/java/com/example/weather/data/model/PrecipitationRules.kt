@@ -11,6 +11,7 @@ data class ExpectedPrecipitation(
     val probability: Int?,
     val amountMm: Double,
     val isCurrent: Boolean = false,
+    val radarPrecipitation: RadarPrecipitation? = null,
 )
 
 fun HourlyWeather.hasMeasurablePrecipitation(
@@ -24,8 +25,19 @@ fun MinutelyWeather.hasMeasurablePrecipitation(
 fun WeatherSnapshot.nextExpectedPrecipitation(
     maxHours: Int = 48,
     now: LocalDateTime = LocalDateTime.now(forecastZoneId()),
+    nowMillis: Long = System.currentTimeMillis(),
 ): ExpectedPrecipitation? {
-    if ((current.precipitationMm ?: 0.0) >= MEASURABLE_PRECIPITATION_MM) {
+    val radar = freshRadarPrecipitation(nowMillis)
+    if (radar?.isRaining() == true) {
+        return ExpectedPrecipitation(
+            time = current.time ?: now.toString(),
+            probability = null,
+            amountMm = radar.intensityLowerBoundMmPerHour,
+            isCurrent = true,
+            radarPrecipitation = radar,
+        )
+    }
+    if (radar == null && (current.precipitationMm ?: 0.0) >= MEASURABLE_PRECIPITATION_MM) {
         return ExpectedPrecipitation(
             time = current.time ?: now.toString(),
             probability = null,

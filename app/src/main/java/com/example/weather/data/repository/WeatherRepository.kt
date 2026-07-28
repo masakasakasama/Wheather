@@ -3,6 +3,7 @@ package com.example.weather.data.repository
 import android.content.Context
 import androidx.glance.appwidget.updateAll
 import com.example.weather.data.api.AirQualityClient
+import com.example.weather.data.api.JmaRadarClient
 import com.example.weather.data.api.OpenMeteoClient
 import com.example.weather.data.cache.WeatherCache
 import com.example.weather.data.model.NotificationSettings
@@ -22,6 +23,7 @@ class WeatherRepository(
     private val context: Context,
     private val openMeteoClient: OpenMeteoClient,
     private val airQualityClient: AirQualityClient,
+    private val radarClient: JmaRadarClient,
     private val cache: WeatherCache,
 ) {
     private val savedLocationsMutex = Mutex()
@@ -42,6 +44,9 @@ class WeatherRepository(
             val forecast = openMeteoClient.fetchForecast(location)
             val snapshot = forecast.copy(
                 airQuality = airQualityClient.fetchAirQuality(location),
+                radarPrecipitation = runCatching {
+                    radarClient.latestPrecipitation(location)
+                }.getOrNull(),
             )
             val selectedLocation = cache.readLocationOnce()
             check(location.sameForecastPlaceAs(selectedLocation)) {
