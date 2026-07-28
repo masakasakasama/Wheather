@@ -67,7 +67,7 @@ class OpenMeteoClient(
             .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset")
             .addQueryParameter("forecast_days", "14")
             .addQueryParameter("forecast_minutely_15", "16")
-            .addQueryParameter("timezone", "Asia/Tokyo")
+            .addQueryParameter("timezone", "auto")
         if (useJmaModel) builder.addQueryParameter("models", "jma_seamless")
 
         val request = Request.Builder()
@@ -142,6 +142,7 @@ class OpenMeteoClient(
             hourly = hourlyItems,
             daily = dailyItems,
             updatedAtMillis = System.currentTimeMillis(),
+            timezone = timezone ?: "Asia/Tokyo",
         )
     }
 }

@@ -97,6 +97,10 @@ import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.forecastZoneId
+import com.example.weather.data.model.hasMeasurablePrecipitation
+import com.example.weather.data.model.maxPrecipitationProbabilityFromNow
+import com.example.weather.data.model.nextExpectedPrecipitation
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
 import com.example.weather.data.model.weatherLabel
@@ -128,7 +132,7 @@ fun HomeScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf<DailyWeather?>(null) }
     val snapshot = state.snapshot
-    val next48Hours = remember(snapshot) { snapshot?.hourly?.nextHours(48).orEmpty() }
+    val next48Hours = remember(snapshot) { snapshot?.hourly?.nextHours(48, snapshot.timezone).orEmpty() }
 
     LazyColumn(
         modifier = Modifier
@@ -359,7 +363,7 @@ private fun HomeHeader(
 @Composable
 private fun DailyForecastPanel(snapshot: WeatherSnapshot) {
     val days = snapshot.daily.take(2)
-    val hours = snapshot.hourly.nextHours(snapshot.hourly.size)
+    val hours = snapshot.hourly.nextHours(snapshot.hourly.size, snapshot.timezone)
     val today = snapshot.today()
     SectionCard(containerColor = WeatherPalette.ForecastSurface) {
         Column {
@@ -383,7 +387,7 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot) {
             }
             ForecastTip(snapshot)
             HorizontalDivider(color = WeatherPalette.Outline)
-            HourlyForecastTable(hours)
+            HourlyForecastTable(hours, snapshot.timezone)
             SunTimesRow(sunrise = today?.sunrise, sunset = today?.sunset)
         }
     }
@@ -445,8 +449,12 @@ private fun DailyForecastColumn(
 @Composable
 private fun ForecastTip(snapshot: WeatherSnapshot) {
     val today = snapshot.today()
-    val dayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
-    val signal = rainSignal(today.effectiveMaxProbability(dayHours), today.effectivePrecipitationSum(dayHours))
+    val remainingToday = today?.let { day ->
+        snapshot.hourly.nextHours(snapshot.hourly.size, snapshot.timezone).filter { it.time.take(10) == day.date }
+    }.orEmpty()
+    val remainingProbability = remainingToday.mapNotNull { it.precipitationProbability }.maxOrNull()
+    val remainingAmount = remainingToday.mapNotNull { it.precipitationMm }.takeIf { it.isNotEmpty() }?.sum()
+    val signal = rainSignal(remainingProbability, remainingAmount)
     Row(
         Modifier
             .fillMaxWidth()
@@ -466,7 +474,7 @@ private fun ForecastTip(snapshot: WeatherSnapshot) {
 }
 
 @Composable
-fun HourlyForecastTable(hours: List<HourlyWeather>) {
+fun HourlyForecastTable(hours: List<HourlyWeather>, timezone: String = "Asia/Tokyo") {
     if (hours.isEmpty()) {
         Text(
             "時間別予報を取得できません",
@@ -507,7 +515,7 @@ fun HourlyForecastTable(hours: List<HourlyWeather>) {
                         Modifier.width(72.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        ForecastTimeValue(hour.time)
+                        ForecastTimeValue(hour.time, timezone)
                         Box(
                             Modifier
                                 .fillMaxWidth()
@@ -529,7 +537,7 @@ fun HourlyForecastTable(hours: List<HourlyWeather>) {
 }
 
 @Composable
-private fun ForecastTimeValue(time: String) {
+private fun ForecastTimeValue(time: String, timezone: String) {
     val parsed = runCatching { LocalDateTime.parse(time) }.getOrNull()
     val dateColor = when (parsed?.dayOfWeek) {
         java.time.DayOfWeek.SATURDAY -> WeatherPalette.LowTemperature
@@ -550,9 +558,9 @@ private fun ForecastTimeValue(time: String) {
             maxLines = 1,
         )
         Text(
-            if (isCurrentHour(time)) "今" else formatHourOnly(time),
+            if (isCurrentHour(time, timezone)) "今" else formatHourOnly(time),
             fontSize = 12.sp,
-            fontWeight = if (isCurrentHour(time)) FontWeight.Bold else FontWeight.Normal,
+            fontWeight = if (isCurrentHour(time, timezone)) FontWeight.Bold else FontWeight.Normal,
             maxLines = 1,
         )
     }
@@ -855,7 +863,7 @@ private fun NotificationSettingsDialog(
                 SettingStepperRow(
                     label = "雨量",
                     value = "${draft.rainAmountThresholdMm.oneDecimal()}mm以上",
-                    onMinus = { draft = draft.copy(rainAmountThresholdMm = (draft.rainAmountThresholdMm - 0.1).coerceAtLeast(0.0)) },
+                    onMinus = { draft = draft.copy(rainAmountThresholdMm = (draft.rainAmountThresholdMm - 0.1).coerceAtLeast(0.1)) },
                     onPlus = { draft = draft.copy(rainAmountThresholdMm = (draft.rainAmountThresholdMm + 0.1).coerceAtMost(10.0)) },
                 )
                 HorizontalDivider(color = Color(0xFF2C3447))
@@ -1003,8 +1011,11 @@ private fun DisasterSummaryCard(summary: DisasterSummary) {
 private fun CurrentSummary(snapshot: WeatherSnapshot) {
     val today = snapshot.today()
     val todayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
-    val next48Hours = snapshot.hourly.nextHours(48)
-    val rainSignal = rainSignal(today.effectiveMaxProbability(todayHours), today.effectivePrecipitationSum(todayHours))
+    val next48Hours = snapshot.hourly.nextHours(48, snapshot.timezone)
+    val remainingToday = today?.let { day -> next48Hours.filter { it.time.take(10) == day.date } }.orEmpty()
+    val remainingProbability = remainingToday.mapNotNull { it.precipitationProbability }.maxOrNull()
+    val remainingAmount = remainingToday.mapNotNull { it.precipitationMm }.takeIf { it.isNotEmpty() }?.sum()
+    val rainSignal = rainSignal(remainingProbability, remainingAmount)
     val comfort = comfortSignal(snapshot, today, next48Hours)
     val trend = temperatureTrendLabel(next48Hours)
     val isNight = remember(snapshot) { isNightNow(snapshot) }
@@ -1119,7 +1130,7 @@ private fun HeroDetailMetric(label: String, value: String, modifier: Modifier = 
 }
 
 private fun isNightNow(snapshot: WeatherSnapshot): Boolean {
-    val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo"))
+    val now = LocalDateTime.now(snapshot.forecastZoneId())
     val today = snapshot.today()
     val sunrise = today?.sunrise?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
     val sunset = today?.sunset?.let { runCatching { LocalDateTime.parse(it) }.getOrNull() }
@@ -1210,9 +1221,9 @@ private fun AirQualityCard(airQuality: AirQuality?) {
 
 @Composable
 private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>) {
-    val peak = next48Hours.maxByOrNull {
-        maxOf((it.precipitationProbability ?: 0).toDouble(), (it.precipitationMm ?: 0.0) * 80.0)
-    }
+    val measurableHours = next48Hours.filter { it.hasMeasurablePrecipitation() }
+    val peak = measurableHours.maxByOrNull { it.precipitationMm ?: 0.0 }
+        ?: next48Hours.maxByOrNull { it.precipitationProbability ?: -1 }
     val signal = rainSignal(peak?.precipitationProbability, peak?.precipitationMm)
     SectionCard {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -1229,7 +1240,7 @@ private fun RainSummary(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeath
             Text("${signal.action}。${nextRainText(snapshot)}", fontSize = 17.sp, fontWeight = FontWeight.SemiBold)
             RainRiskBar(peak?.precipitationProbability, peak?.precipitationMm)
             LabelValueRow(
-                label = "48時間のピーク",
+                label = if (measurableHours.isNotEmpty()) "48時間の雨量ピーク" else "48時間の確率ピーク",
                 value = peak?.let { "${formatDateHourLabel(it.time)} ${it.precipitationProbability.percentText()} / ${it.precipitationMm.mmText()}" }
                     ?: "降水データなし",
                 color = MaterialTheme.colorScheme.secondary,
@@ -1584,9 +1595,10 @@ fun formatHourOnly(time: String): String {
     return "${hour}時"
 }
 
-private fun isCurrentHour(time: String): Boolean {
+private fun isCurrentHour(time: String, timezone: String = "Asia/Tokyo"): Boolean {
     val parsed = runCatching { LocalDateTime.parse(time) }.getOrNull() ?: return false
-    val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo"))
+    val zone = runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.of("Asia/Tokyo"))
+    val now = LocalDateTime.now(zone)
     return parsed.toLocalDate() == now.toLocalDate() && parsed.hour == now.hour
 }
 
@@ -1976,18 +1988,22 @@ private fun LabelValueRow(label: String, value: String, color: Color) {
 }
 
 fun nextRainText(snapshot: WeatherSnapshot): String {
-    val nextMinute = snapshot.minutely15.nextMinutely15(16).firstOrNull {
-        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) >= 0.1
+    val expected = snapshot.nextExpectedPrecipitation(maxHours = 48)
+    if (expected != null) {
+        return if (expected.isCurrent) {
+            "現在、雨が降っています（${expected.amountMm.mmText()}）"
+        } else {
+            "${formatDateMinuteLabel(expected.time)}ごろから雨予報（${expected.amountMm.mmText()}）"
+        }
     }
-    if (nextMinute != null) {
-        return "${formatDateMinuteLabel(nextMinute.time)}ごろから雨の可能性"
+    val maxProbability = snapshot.maxPrecipitationProbabilityFromNow(maxHours = 48)
+    val hasAmountData = snapshot.minutely15.any { it.precipitationMm != null } ||
+        snapshot.hourly.nextHours(48, snapshot.timezone).any { it.precipitationMm != null }
+    return when {
+        !hasAmountData -> "48時間の雨量データなし${maxProbability?.let { "（確率最大$it%）" }.orEmpty()}"
+        maxProbability != null -> "48時間の予想雨量は0.0mm（確率最大$maxProbability%）"
+        else -> "48時間の雨予報はありません"
     }
-    val next = snapshot.hourly.nextHours(48).firstOrNull {
-        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) > 0.0
-    }
-    return next?.let {
-        "${formatDateHourLabel(it.time)}ごろから雨の可能性"
-    } ?: "48時間以内の雨の可能性は低め"
 }
 
 fun formatHourLabel(time: String): String {
@@ -2099,17 +2115,19 @@ fun formatDateLong(date: String): String {
     return parsed?.format(DateTimeFormatter.ofPattern("yyyy年M月d日")) ?: date
 }
 
-fun List<HourlyWeather>.nextHours(count: Int): List<HourlyWeather> {
-    val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo")).withMinute(0).withSecond(0).withNano(0)
+fun List<HourlyWeather>.nextHours(count: Int, timezone: String = "Asia/Tokyo"): List<HourlyWeather> {
+    val zone = runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.of("Asia/Tokyo"))
+    val now = LocalDateTime.now(zone).withMinute(0).withSecond(0).withNano(0)
     return filter { hour ->
         runCatching { !LocalDateTime.parse(hour.time).isBefore(now) }.getOrDefault(false)
     }.take(count)
 }
 
-fun List<MinutelyWeather>.nextMinutely15(count: Int): List<MinutelyWeather> {
-    val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo")).minusMinutes(15)
+fun List<MinutelyWeather>.nextMinutely15(count: Int, timezone: String = "Asia/Tokyo"): List<MinutelyWeather> {
+    val zone = runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.of("Asia/Tokyo"))
+    val now = LocalDateTime.now(zone)
     return filter { minute ->
-        runCatching { !LocalDateTime.parse(minute.time).isBefore(now) }.getOrDefault(false)
+        runCatching { LocalDateTime.parse(minute.time).plusMinutes(15).isAfter(now) }.getOrDefault(false)
     }.take(count)
 }
 
@@ -2148,13 +2166,10 @@ data class ComfortSignal(
 
 fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>): List<DailyAdvice> {
     val today = snapshot.today()
-    val todayHours = today?.let { snapshot.hourly.forDate(it.date) }.orEmpty()
     val next24Hours = next48Hours.take(24)
-    val maxProbability = today.effectiveMaxProbability(todayHours) ?: next24Hours.mapNotNull { it.precipitationProbability }.maxOrNull()
-    val precipitationSum = today.effectivePrecipitationSum(todayHours)
-    val rainHour = next24Hours.firstOrNull {
-        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) >= 0.2
-    }
+    val maxProbability = next24Hours.mapNotNull { it.precipitationProbability }.maxOrNull()
+    val precipitationSum = next24Hours.mapNotNull { it.precipitationMm }.takeIf { it.isNotEmpty() }?.sum()
+    val nextRain = snapshot.nextExpectedPrecipitation(maxHours = 24)
     val peakRainHour = next24Hours.maxByOrNull {
         maxOf((it.precipitationProbability ?: 0).toDouble(), (it.precipitationMm ?: 0.0) * 100.0)
     }
@@ -2167,10 +2182,14 @@ fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>
     val aqi = snapshot.airQuality?.europeanAqi
 
     val umbrella = when {
-        rainHour != null -> DailyAdvice(
+        nextRain != null -> DailyAdvice(
             label = "傘",
             value = "持つ",
-            detail = "${formatDateHourLabel(rainHour.time)} ${rainHour.precipitationProbability.percentText()} / ${rainHour.precipitationMm.mmText()}",
+            detail = if (nextRain.isCurrent) {
+                "現在降水 ${nextRain.amountMm.mmText()}"
+            } else {
+                "${formatDateMinuteLabel(nextRain.time)}ごろ ${nextRain.probability.percentText()} / ${nextRain.amountMm.mmText()}"
+            },
             color = Color(0xFF26313A),
         )
         (maxProbability ?: 0) >= 30 -> DailyAdvice(
@@ -2188,11 +2207,17 @@ fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>
     }
 
     val laundry = when {
-        (precipitationSum ?: 0.0) >= 1.0 || (maxProbability ?: 0) >= 50 -> DailyAdvice(
+        (precipitationSum ?: 0.0) >= 0.1 -> DailyAdvice(
             label = "洗濯",
             value = "部屋干し",
             detail = "降水 ${maxProbability.percentText()} / ${precipitationSum.mmText()}",
             color = Color(0xFF2B2327),
+        )
+        (maxProbability ?: 0) >= 50 -> DailyAdvice(
+            label = "洗濯",
+            value = "外干し注意",
+            detail = "確率 ${maxProbability.percentText()} / 予想雨量 ${precipitationSum.mmText()}",
+            color = Color(0xFF272624),
         )
         (humidity ?: 0) >= 75 -> DailyAdvice(
             label = "洗濯",
@@ -2277,7 +2302,9 @@ fun dayPeriodSummaries(hours: List<HourlyWeather>): Pair<DayPeriodSummary, DayPe
 }
 
 private fun summarizePeriod(label: String, hours: List<HourlyWeather>): DayPeriodSummary {
-    val maxRainHour = hours.maxByOrNull { it.precipitationProbability ?: -1 }
+    val maxRainHour = hours.filter { it.hasMeasurablePrecipitation() }
+        .maxByOrNull { it.precipitationMm ?: 0.0 }
+        ?: hours.maxByOrNull { it.precipitationProbability ?: -1 }
     val representativeWeather = maxRainHour?.weatherCode ?: hours.firstOrNull()?.weatherCode
     return DayPeriodSummary(
         label = label,
@@ -2319,11 +2346,23 @@ fun rainSignal(probability: Int?, precipitationMm: Double?): RainSignal {
             detail = "傘だけでなく靴も注意",
             color = Color(0xFF64D2FF),
         )
-        rain >= 1.0 || probabilityValue >= 70 -> RainSignal(
+        rain >= 1.0 -> RainSignal(
             label = "雨具必要",
             action = "傘を持つ",
-            detail = "降り出しやすい一日",
+            detail = "予想雨量を確認",
             color = Color(0xFF64D2FF),
+        )
+        rain >= 0.1 -> RainSignal(
+            label = "雨予報あり",
+            action = "傘を持つ",
+            detail = "降り出す時刻を確認",
+            color = Color(0xFF64D2FF),
+        )
+        probabilityValue >= 70 -> RainSignal(
+            label = "確率高め・雨量なし",
+            action = "折りたたみ",
+            detail = "雨量0.0mmなら断定しない",
+            color = Color(0xFFBFFF3C),
         )
         probabilityValue >= 40 -> RainSignal(
             label = "降るかも",
@@ -2393,14 +2432,12 @@ fun temperatureTrendLabel(hours: List<HourlyWeather>): String {
 }
 
 fun nextRainShortText(snapshot: WeatherSnapshot): String {
-    val nextMinute = snapshot.minutely15.nextMinutely15(16).firstOrNull {
-        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) >= 0.1
+    val expected = snapshot.nextExpectedPrecipitation(maxHours = 48)
+    return when {
+        expected?.isCurrent == true -> "現在降水中"
+        expected != null -> formatDateMinuteLabel(expected.time)
+        else -> "雨量予測なし"
     }
-    if (nextMinute != null) return formatDateMinuteLabel(nextMinute.time)
-    val next = snapshot.hourly.nextHours(48).firstOrNull {
-        (it.precipitationProbability ?: 0) >= 50 || (it.precipitationMm ?: 0.0) > 0.0
-    }
-    return next?.let { formatDateHourLabel(it.time) } ?: "48h低め"
 }
 
 fun rainColor(probability: Int?, precipitationMm: Double?): Color = rainSignal(probability, precipitationMm).color

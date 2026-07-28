@@ -19,6 +19,7 @@ import androidx.glance.layout.Alignment
 import androidx.glance.layout.Column
 import androidx.glance.layout.Row
 import androidx.glance.layout.Spacer
+import androidx.glance.layout.defaultWeight
 import androidx.glance.layout.fillMaxSize
 import androidx.glance.layout.fillMaxWidth
 import androidx.glance.layout.height
@@ -33,10 +34,12 @@ import com.example.weather.MainActivity
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
-import com.example.weather.data.model.weatherLabel
 import com.example.weather.ui.formatHourMinute
 import com.example.weather.ui.nextRainText
 import com.example.weather.ui.nextHours
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 class WeatherWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(
@@ -104,38 +107,84 @@ private fun EmptyWidget(modifier: GlanceModifier) {
 
 @androidx.compose.runtime.Composable
 private fun WeatherSquareWidgetContent(snapshot: WeatherSnapshot?) {
+    val size = LocalSize.current
     val modifier = GlanceModifier
         .fillMaxSize()
-        .background(ColorProvider(Color(0xFF101114)))
+        .background(ColorProvider(Color(0xFF121416)))
         .clickable(actionStartActivity<MainActivity>())
-        .padding(8.dp)
+        .padding(horizontal = 9.dp, vertical = 7.dp)
     if (snapshot == null) {
         EmptyWidget(modifier)
         return
     }
 
-    val today = snapshot.today()
-    val todayHours = today?.let { day ->
-        snapshot.hourly.filter { it.time.take(10) == day.date }
-    }.orEmpty()
-    Column(modifier) {
-        Text(snapshot.location.name, style = widgetText(10, bold = true), maxLines = 1)
+    val compact = size.height < 135.dp
+    val days = snapshot.daily.take(2)
+    Column(
+        modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "📍 ${snapshot.location.name.substringBefore(" (")}",
+            style = widgetText(if (compact) 11 else 13, bold = true),
+            maxLines = 1,
+        )
+        Spacer(GlanceModifier.height(if (compact) 2.dp else 4.dp))
+        Row(GlanceModifier.fillMaxWidth()) {
+            days.forEachIndexed { index, day ->
+                val dayHours = snapshot.hourly.filter { it.time.take(10) == day.date }
+                SquareForecastDay(
+                    relativeLabel = if (index == 0) "今日" else "明日",
+                    date = day.date,
+                    icon = weatherIcon(day.weatherCode),
+                    high = day.maxTemperatureC,
+                    low = day.minTemperatureC,
+                    probability = day.effectiveMaxProbability(dayHours),
+                    compact = compact,
+                    modifier = GlanceModifier.defaultWeight(),
+                )
+            }
+        }
+    }
+}
+
+@androidx.compose.runtime.Composable
+private fun SquareForecastDay(
+    relativeLabel: String,
+    date: String,
+    icon: String,
+    high: Double?,
+    low: Double?,
+    probability: Int?,
+    compact: Boolean,
+    modifier: GlanceModifier,
+) {
+    Column(
+        modifier,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            "$relativeLabel ${formatWidgetDate(date)}",
+            style = widgetText(if (compact) 10 else 12, bold = true),
+            maxLines = 1,
+        )
+        Text(icon, style = widgetText(if (compact) 32 else 43), maxLines = 1)
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(30, bold = true))
-            Spacer(GlanceModifier.width(7.dp))
-            Text(weatherIcon(snapshot.current.weatherCode), style = widgetText(22))
+            Text(
+                "${high?.roundText() ?: "--"}°",
+                style = widgetText(if (compact) 13 else 16, bold = true, color = Color(0xFFFF665E)),
+            )
+            Spacer(GlanceModifier.width(5.dp))
+            Text(
+                "${low?.roundText() ?: "--"}°",
+                style = widgetText(if (compact) 13 else 16, bold = true, color = Color(0xFF6FA8FF)),
+            )
         }
         Text(
-            "${weatherLabel(snapshot.current.weatherCode)}  H ${today?.maxTemperatureC?.roundText() ?: "--"}° / L ${today?.minTemperatureC?.roundText() ?: "--"}°",
-            style = widgetText(11),
+            "💧 ${probability.percentText()}",
+            style = widgetText(if (compact) 11 else 14),
             maxLines = 1,
         )
-        Text(
-            "降水 ${today.effectiveMaxProbability(todayHours).percentText()}  ${today.effectivePrecipitationSum(todayHours).mmText()}",
-            style = widgetText(10, muted = true),
-            maxLines = 1,
-        )
-        Text(nextRainText(snapshot), style = widgetText(10, muted = true), maxLines = 1)
     }
 }
 
@@ -159,7 +208,7 @@ private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
 
 @androidx.compose.runtime.Composable
 private fun MediumWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
-    val hours = snapshot.hourly.nextHours(6)
+    val hours = snapshot.hourly.nextHours(6, snapshot.timezone)
     Column(modifier) {
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(32, bold = true))
@@ -175,7 +224,7 @@ private fun MediumWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
 
 @androidx.compose.runtime.Composable
 private fun LargeWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
-    val hours = snapshot.hourly.nextHours(48)
+    val hours = snapshot.hourly.nextHours(48, snapshot.timezone)
     val todayMax = hours.take(24).mapNotNull { it.precipitationProbability }.maxOrNull()
     val tomorrowMax = hours.drop(24).take(24).mapNotNull { it.precipitationProbability }.maxOrNull()
     Column(modifier) {
@@ -194,13 +243,23 @@ private fun LargeWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
     }
 }
 
-private fun widgetText(size: Int, bold: Boolean = false, muted: Boolean = false): TextStyle {
+private fun widgetText(
+    size: Int,
+    bold: Boolean = false,
+    muted: Boolean = false,
+    color: Color? = null,
+): TextStyle {
     return TextStyle(
-        color = ColorProvider(if (muted) Color(0xFFB8B8B8) else Color(0xFFF4F4F4)),
+        color = ColorProvider(color ?: if (muted) Color(0xFFB8B8B8) else Color(0xFFF4F4F4)),
         fontSize = size.sp,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
     )
 }
+
+private fun formatWidgetDate(date: String): String =
+    runCatching {
+        LocalDate.parse(date).format(DateTimeFormatter.ofPattern("M/d(E)", Locale.JAPANESE))
+    }.getOrDefault(date.takeLast(5))
 
 private fun Double.roundText(): String = "%.0f".format(this)
 private fun Double.oneDecimal(): String = "%.1f".format(this)

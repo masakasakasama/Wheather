@@ -70,10 +70,10 @@ jobs:
           fi
           keytool -list -keystore debug.keystore -storepass android -alias androiddebugkey
 
-      - name: Build debug APK
+      - name: Test and build debug APK
         run: |
           set +e
-          gradle --no-daemon assembleDebug --stacktrace > build.log 2>&1
+          gradle --no-daemon testDebugUnitTest assembleDebug --stacktrace > build.log 2>&1
           status=$?
           if [ "$status" -ne 0 ]; then
             grep -nE "e: |error:|What went wrong|FAILURE|Unresolved|Type mismatch|Cannot|None of the following|Compilation error" build.log | tail -n 200 || true

@@ -40,7 +40,7 @@ gradle assembleDebug
   - `hourly`: `temperature_2m`, `precipitation_probability`, `weather_code`, `precipitation`
   - `daily`: `weather_code`, `temperature_2m_max`, `temperature_2m_min`, `precipitation_probability_max`, `precipitation_sum`, `uv_index_max`, `sunrise`, `sunset`
   - `forecast_days=14`
-  - `timezone=Asia/Tokyo`
+  - `timezone=auto` を使い、取得地点の現地タイムゾーンをキャッシュして時刻判定・表示・通知・ウィジェットで共有
   - models指定なしのOpen-Meteo Best Matchを優先し、取得失敗時だけ `models=jma_seamless` へフォールバック
   - 予報元はキャッシュにも保存し、ホーム下部に表示
 - Open-Meteo `minutely_15` による短時間データ取得
@@ -63,6 +63,11 @@ gradle assembleDebug
 - Jetpack Glanceホーム画面ウィジェット
   - 現在時刻以降の時間別データを使い、日別表示と同じ降水確率補完ロジックで0%表示の矛盾を避ける
   - 可変サイズ版に加え、ランチャーで明示的に選択できる専用2×2版を提供
+  - 2×2版は地点名、今日/明日の大きい天気アイコン、最高/最低、降水確率を2列比較する構成
+- 降水表示の共通判定
+  - 0.1mm以上の予想雨量だけを「雨開始」とし、確率だけ高く雨量0.0mmの場合は雨開始と断定しない
+  - 15分予報の範囲内は高解像度側を優先し、重複する1時間予報で開始時刻を上書きしない
+  - ホーム、次の雨、今日の判断、通知、ウィジェットで同じ雨開始判定を使用
 - 今日の判断カード
   - 傘、洗濯、服装、外出注意を降水確率・降水量・湿度・風・UV・AQIから自動判定
 - 気象庁 `targetTimes_N1.json` と雨雲レーダータイルの最新時刻表示

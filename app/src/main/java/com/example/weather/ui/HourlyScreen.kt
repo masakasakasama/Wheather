@@ -31,7 +31,7 @@ fun HourlyScreen(snapshot: WeatherSnapshot?) {
             return@Column
         }
 
-        val hours = remember(snapshot) { snapshot.hourly.nextHours(snapshot.hourly.size) }
+        val hours = remember(snapshot) { snapshot.hourly.nextHours(snapshot.hourly.size, snapshot.timezone) }
         Text(
             "現在時刻から取得できる最終時刻まで、横にスクロールできます。",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -43,7 +43,7 @@ fun HourlyScreen(snapshot: WeatherSnapshot?) {
             colors = CardDefaults.cardColors(containerColor = WeatherPalette.ForecastSurface),
             shape = MaterialTheme.shapes.medium,
         ) {
-            HourlyForecastTable(hours)
+            HourlyForecastTable(hours, snapshot.timezone)
         }
     }
 }

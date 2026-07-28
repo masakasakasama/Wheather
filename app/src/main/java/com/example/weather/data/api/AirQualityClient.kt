@@ -22,7 +22,7 @@ class AirQualityClient(
             .addQueryParameter("current", "european_aqi,us_aqi,pm10,pm2_5,nitrogen_dioxide,ozone")
             .addQueryParameter("hourly", "european_aqi,pm2_5,pm10,uv_index")
             .addQueryParameter("forecast_days", "2")
-            .addQueryParameter("timezone", "Asia/Tokyo")
+            .addQueryParameter("timezone", "auto")
             .build()
         val request = Request.Builder()
             .url(url)

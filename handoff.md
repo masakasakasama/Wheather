@@ -15,6 +15,16 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 
 ## これまでの作業内容
 
+- 2026-07-28 降水時刻の矛盾、世界地点の時刻、2×2ウィジェットを修正。
+  - 降水確率50%以上だけで雨量0.0mmの時刻を「雨開始」としていたロジックを廃止。0.1mm以上の予想雨量を共通の雨開始条件にした。
+  - 15分予報の有効範囲では重複する1時間予報を使わず、範囲終了後だけ1時間予報へ接続する `PrecipitationRules` を追加。
+  - 「傘を持つ」「次の雨」、雨の見通し、洗濯判断、通知、ウィジェットの降水文言を監査。確率だけ高く雨量0.0mmの場合は「確率高め」とし、雨が降るとは断定しない。
+  - 今日の判断から過去時間の降水を除外し、現在時刻以降の最大確率と予想雨量だけで判定。
+  - 雨量通知設定の0.0mmを禁止し、既存保存値も判定時に最低0.1mmへ補正。
+  - Open-Meteoの `timezone=auto` とレスポンスのタイムゾーンを保存し、世界地点の現在時刻、今日/明日、時間表、通知、ウィジェットを地点現地時刻へ統一。
+  - 専用2×2ウィジェットを参考画像に合わせ、地点名、今日/明日、大きい天気アイコン、最高/最低、降水確率の2列比較へ刷新。ウィジェット選択画面のプレビューも同構成に変更。
+  - 降水確率だけ高い時刻を雨開始にしないこと、15分予報が重複時間の1時間予報より優先されることを単体テストに追加。
+  - GitHub Actionsを `testDebugUnitTest assembleDebug` に変更し、単体テスト成功後だけAPKを公開するようにした。
 - 2026-07-27 予報モデルの実測比較、時間別表示拡張、2×2ウィジェットを実装。
   - 東京の気象庁観測点47662について、2026-06-15から2026-07-26までの実測41日分をOpen-Meteo Previous Runs APIの過去予報と比較。
   - 最高気温MAEはBest Matchが1/3/5/7日前で1.46/1.95/2.02/2.74℃、JMA Seamlessが1.46/3.77/4.13/3.84℃。JMA Seamlessは3日後と5日後に約-3.7℃の低温バイアスがあった。
@@ -151,6 +161,7 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 - `app/src/main/res/values/styles.xml`
 - `app/src/main/res/drawable/ic_launcher.xml`
 - `app/src/main/res/layout/weather_widget_loading.xml`
+- `app/src/main/res/layout/weather_widget_square_preview.xml`
 - `app/src/main/res/xml/weather_widget_info.xml`
 - `app/src/main/res/xml/weather_widget_square_info.xml`
 
@@ -169,6 +180,7 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 - `app/src/main/java/com/example/weather/data/api/JmaDisasterClient.kt`
 - `app/src/main/java/com/example/weather/data/cache/WeatherCache.kt`
 - `app/src/main/java/com/example/weather/data/model/WeatherModels.kt`
+- `app/src/main/java/com/example/weather/data/model/PrecipitationRules.kt`
 - `app/src/main/java/com/example/weather/data/model/AppUpdateModels.kt`
 - `app/src/main/java/com/example/weather/data/model/DisasterModels.kt`
 - `app/src/main/java/com/example/weather/data/repository/WeatherRepository.kt`
@@ -187,6 +199,7 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 - `app/src/main/java/com/example/weather/ui/RadarScreen.kt`
 - `app/src/main/java/com/example/weather/ui/HourlyScreen.kt`
 - `app/src/main/java/com/example/weather/ui/WeeklyScreen.kt`
+- `app/src/test/java/com/example/weather/data/model/PrecipitationRulesTest.kt`
 
 ### ドキュメント
 

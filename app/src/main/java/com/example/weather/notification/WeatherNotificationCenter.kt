@@ -17,8 +17,9 @@ import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.forecastZoneId
+import com.example.weather.data.model.hasMeasurablePrecipitation
 import java.time.LocalDateTime
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 class WeatherNotificationCenter(
@@ -51,19 +52,21 @@ class WeatherNotificationCenter(
     }
 
     private fun notifyRainIfNeeded(snapshot: WeatherSnapshot, settings: NotificationSettings) {
-        val rainHour = snapshot.hourly.nextNotificationHours(settings.rainLookAheadHours).firstOrNull {
+        val amountThreshold = settings.rainAmountThresholdMm.coerceAtLeast(0.1)
+        val rainHour = snapshot.hourly.nextNotificationHours(settings.rainLookAheadHours, snapshot).firstOrNull {
             (it.precipitationProbability ?: 0) >= settings.rainProbabilityThreshold ||
-                (it.precipitationMm ?: 0.0) >= settings.rainAmountThresholdMm
+                (it.precipitationMm ?: 0.0) >= amountThreshold
         } ?: return
         val signature = "${rainHour.time}:${rainHour.precipitationProbability}:${rainHour.precipitationMm}"
         if (!shouldNotify("rain_signature", signature)) return
 
         val probability = rainHour.precipitationProbability?.let { "$it%" } ?: "--%"
         val precipitation = rainHour.precipitationMm?.let { "%.1fmm".format(it) } ?: "--mm"
+        val measurableRain = rainHour.hasMeasurablePrecipitation(amountThreshold)
         show(
             id = NOTIFICATION_RAIN,
-            title = "雨が近いです",
-            text = "${formatDateHourLabel(rainHour.time)}ごろ 降水確率 $probability / $precipitation",
+            title = if (measurableRain) "雨の予報があります" else "降水確率が上がります",
+            text = "${formatDateHourLabel(rainHour.time)} 降水確率 $probability / 予想雨量 $precipitation",
         )
     }
 
@@ -122,8 +125,11 @@ class WeatherNotificationCenter(
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun List<HourlyWeather>.nextNotificationHours(count: Int): List<HourlyWeather> {
-        val now = LocalDateTime.now(ZoneId.of("Asia/Tokyo")).withMinute(0).withSecond(0).withNano(0)
+    private fun List<HourlyWeather>.nextNotificationHours(
+        count: Int,
+        snapshot: WeatherSnapshot,
+    ): List<HourlyWeather> {
+        val now = LocalDateTime.now(snapshot.forecastZoneId()).withMinute(0).withSecond(0).withNano(0)
         return filter { hour ->
             runCatching { !LocalDateTime.parse(hour.time).isBefore(now) }.getOrDefault(false)
         }.take(count)

@@ -20,6 +20,7 @@ data class WeatherSnapshot(
     val updatedAtMillis: Long,
     val usedFallbackModel: Boolean = false,
     val forecastSource: String = "Open-Meteo",
+    val timezone: String = "Asia/Tokyo",
     val airQuality: AirQuality? = null,
 )
 
@@ -104,6 +105,7 @@ data class HourlyAirQuality(
 data class OpenMeteoResponse(
     val latitude: Double? = null,
     val longitude: Double? = null,
+    val timezone: String? = null,
     val current: OpenMeteoCurrent? = null,
     @SerialName("minutely_15") val minutely15: OpenMeteoMinutely15? = null,
     val hourly: OpenMeteoHourly? = null,
