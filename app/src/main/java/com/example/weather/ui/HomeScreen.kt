@@ -2,6 +2,7 @@ package com.example.weather.ui
 
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.net.Uri
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -42,6 +43,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Air
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.LocationOn
+import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material.icons.outlined.Tune
@@ -83,6 +85,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -132,7 +135,8 @@ fun HomeScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var selectedDay by remember { mutableStateOf<DailyWeather?>(null) }
     val snapshot = state.snapshot
-    val next48Hours = remember(snapshot) { snapshot?.hourly?.nextHours(48, snapshot.timezone).orEmpty() }
+    val disasterSummary = state.disasterSummary
+    val uriHandler = LocalUriHandler.current
 
     LazyColumn(
         modifier = Modifier
@@ -169,8 +173,15 @@ fun HomeScreen(
                 Text("天気を取得しています", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
-            if (state.disasterSummary?.hasImportantInfo == true) {
-                item { DisasterSummaryCard(state.disasterSummary) }
+            if (disasterSummary?.hasImportantInfo == true) {
+                item {
+                    DisasterSummaryCard(
+                        summary = disasterSummary,
+                        onClick = {
+                            uriHandler.openUri(googleWeatherSearchUrl(disasterSummary))
+                        },
+                    )
+                }
             }
             item { DailyForecastPanel(snapshot) }
             item { CurrentConditionsPanel(snapshot) }
@@ -232,6 +243,7 @@ fun HomeScreen(
         DayDetailDialog(
             day = day,
             dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(),
+            timezone = snapshot?.timezone ?: "Asia/Tokyo",
             onDismiss = { selectedDay = null },
         )
     }
@@ -251,86 +263,48 @@ private fun HomeHeader(
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(6.dp))
             .background(WeatherPalette.Header),
     ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(66.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            LazyRow(
-                modifier = Modifier.weight(1f),
-                contentPadding = PaddingValues(start = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
-            ) {
-                items(savedLocations) { location ->
-                    val selected = location.samePlaceAs(selectedLocation)
-                    Column(
-                        Modifier
-                            .widthIn(min = 96.dp, max = 142.dp)
-                            .fillMaxHeight()
-                            .clickable { onSelectLocation(location) }
-                            .padding(horizontal = 10.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            if (selected) {
-                                Icon(
-                                    Icons.Outlined.LocationOn,
-                                    contentDescription = null,
-                                    tint = Color.White,
-                                    modifier = Modifier.size(15.dp),
-                                )
-                            }
-                            Text(
-                                if (selected && location.name == "現在地") "現在地" else location.name,
-                                maxLines = 1,
-                                color = if (selected) Color.White else Color.White.copy(alpha = 0.58f),
-                                fontSize = if (selected) 15.sp else 13.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                            )
-                        }
-                        if (selected) {
-                            Spacer(Modifier.height(6.dp))
-                            Box(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(3.dp)
-                                    .clip(RoundedCornerShape(2.dp))
-                                    .background(Color.White),
-                            )
-                        }
-                    }
-                }
-            }
-            FilledTonalIconButton(
-                onClick = onLocation,
-                colors = IconButtonDefaults.filledTonalIconButtonColors(
-                    containerColor = Color.Transparent,
-                    contentColor = Color.White,
-                ),
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = "地点を追加")
-            }
-        }
-        HorizontalDivider(color = Color.White.copy(alpha = 0.12f))
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(start = 14.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+                .padding(start = 12.dp, end = 5.dp, top = 6.dp, bottom = 4.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(freshness, fontSize = 12.sp, color = Color.White.copy(alpha = 0.66f))
+            Row(
+                Modifier.weight(1f),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    Icons.Outlined.LocationOn,
+                    contentDescription = null,
+                    tint = WeatherPalette.Rain,
+                    modifier = Modifier.size(20.dp),
+                )
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                    Text(
+                        selectedLocation.name,
+                        color = Color.White,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                    )
+                    Text(
+                        "表示中・$freshness",
+                        fontSize = 10.sp,
+                        color = Color.White.copy(alpha = 0.62f),
+                        maxLines = 1,
+                    )
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 FilledTonalIconButton(
                     onClick = onRefresh,
                     enabled = !isRefreshing,
+                    modifier = Modifier.size(38.dp),
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
@@ -348,12 +322,62 @@ private fun HomeHeader(
                 }
                 FilledTonalIconButton(
                     onClick = onSettings,
+                    modifier = Modifier.size(38.dp),
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
                         containerColor = Color.Transparent,
                         contentColor = Color.White,
                     ),
                 ) {
                     Icon(Icons.Outlined.Tune, contentDescription = "設定", modifier = Modifier.size(21.dp))
+                }
+                FilledTonalIconButton(
+                    onClick = onLocation,
+                    modifier = Modifier.size(38.dp),
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = Color.Transparent,
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Icon(Icons.Outlined.Add, contentDescription = "地点を追加", modifier = Modifier.size(21.dp))
+                }
+            }
+        }
+        LazyRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(38.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 3.dp),
+            horizontalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            items(savedLocations) { location ->
+                val selected = location.samePlaceAs(selectedLocation)
+                Row(
+                    Modifier
+                        .widthIn(min = 58.dp, max = 112.dp)
+                        .height(32.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(if (selected) Color.White else Color.White.copy(alpha = 0.07f))
+                        .clickable { onSelectLocation(location) }
+                        .padding(horizontal = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                ) {
+                    if (selected) {
+                        Box(
+                            Modifier
+                                .size(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(WeatherPalette.Rain),
+                        )
+                        Spacer(Modifier.width(5.dp))
+                    }
+                    Text(
+                        location.name,
+                        maxLines = 1,
+                        color = if (selected) WeatherPalette.Header else Color.White.copy(alpha = 0.72f),
+                        fontSize = 12.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                    )
                 }
             }
         }
@@ -970,10 +994,11 @@ private fun AppUpdateRow(
 }
 
 @Composable
-private fun DisasterSummaryCard(summary: DisasterSummary) {
+private fun DisasterSummaryCard(summary: DisasterSummary, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onClick)
             .border(1.dp, Color(0xFF5A2A2A), MaterialTheme.shapes.medium),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF2B1717)),
         shape = MaterialTheme.shapes.medium,
@@ -1002,9 +1027,37 @@ private fun DisasterSummaryCard(summary: DisasterSummary) {
             summary.warningHeadline?.let {
                 Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
             }
-            Text("気象庁発表。避難判断は自治体・気象庁の最新情報を確認", color = Color(0xFFFFDAD6), fontSize = 11.sp)
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "気象庁発表。最新情報をGoogleで確認",
+                    color = Color(0xFFFFDAD6),
+                    fontSize = 11.sp,
+                )
+                Icon(
+                    Icons.Outlined.OpenInNew,
+                    contentDescription = "Google検索を開く",
+                    tint = Color(0xFFFFDAD6),
+                    modifier = Modifier.size(17.dp),
+                )
+            }
         }
     }
+}
+
+fun googleWeatherSearchUrl(summary: DisasterSummary): String {
+    val typhoons = summary.typhoons.joinToString(" ") { "台風${it.number}号 ${it.category}" }
+    val query = listOf(
+        summary.officeName,
+        summary.activeWarnings.joinToString(" "),
+        typhoons,
+        summary.warningHeadline,
+        "気象庁 最新",
+    ).filterNot { it.isNullOrBlank() }.joinToString(" ")
+    return "https://www.google.com/search?q=${Uri.encode(query)}"
 }
 
 @Composable
@@ -1781,29 +1834,27 @@ private fun RainRiskBar(probability: Int?, precipitation: Double?) {
 }
 
 @Composable
-fun DayDetailDialog(day: DailyWeather, dayHours: List<HourlyWeather>, onDismiss: () -> Unit) {
-    val parts = dayPeriodSummaries(dayHours)
-    val maxProbability = day.effectiveMaxProbability(dayHours)
-    val precipitation = day.effectivePrecipitationSum(dayHours)
-    val signal = rainSignal(maxProbability, precipitation)
+fun DayDetailDialog(
+    day: DailyWeather,
+    dayHours: List<HourlyWeather>,
+    timezone: String = "Asia/Tokyo",
+    onDismiss: () -> Unit,
+) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(formatDateLong(day.date)) },
+        title = { Text("${formatDateLong(day.date)}の時間予報") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    WeatherGlyph(code = day.weatherCode, size = 38.dp)
-                    Text(weatherLabel(day.weatherCode), fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "横にスクロールして1時間ごとの変化を確認",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                )
+                if (dayHours.isEmpty()) {
+                    Text("この日の時間予報を取得できません")
+                } else {
+                    HourlyForecastTable(dayHours, timezone)
                 }
-                Text("${signal.action}: ${signal.label}", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = signal.color)
-                Text(signal.detail, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                RainRiskBar(maxProbability, precipitation)
-                LabelValueRow("最高 / 最低", "${day.maxTemperatureC?.roundText() ?: "--"}° / ${day.minTemperatureC?.roundText() ?: "--"}°", MaterialTheme.colorScheme.onSurface)
-                LabelValueRow("最大降水 / 雨量", "${maxProbability.percentText()} / ${precipitation.mmText()}", MaterialTheme.colorScheme.secondary)
-                LabelValueRow("UV指数", day.uvIndexMax.uvText(), MaterialTheme.colorScheme.onSurface)
-                LabelValueRow("日の出 / 日の入", "${formatTimeOnly(day.sunrise)} / ${formatTimeOnly(day.sunset)}", MaterialTheme.colorScheme.onSurface)
-                LabelValueRow("AM", "${rainSignal(parts.first.maxProbability, parts.first.precipitationSum).action}・${weatherLabel(parts.first.weatherCode)} ${parts.first.maxProbability.percentText()} / ${parts.first.precipitationSum.mmText()}", MaterialTheme.colorScheme.onSurface)
-                LabelValueRow("PM", "${rainSignal(parts.second.maxProbability, parts.second.precipitationSum).action}・${weatherLabel(parts.second.weatherCode)} ${parts.second.maxProbability.percentText()} / ${parts.second.precipitationSum.mmText()}", MaterialTheme.colorScheme.onSurface)
             }
         },
         confirmButton = {

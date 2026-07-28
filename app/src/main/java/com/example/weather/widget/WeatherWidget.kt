@@ -33,6 +33,7 @@ import com.example.weather.MainActivity
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
+import com.example.weather.data.model.weatherLabel
 import com.example.weather.ui.formatHourMinute
 import com.example.weather.ui.nextRainText
 import com.example.weather.ui.nextHours
@@ -137,6 +138,7 @@ private fun WeatherSquareWidgetContent(snapshot: WeatherSnapshot?) {
                     relativeLabel = if (index == 0) "今日" else "明日",
                     date = day.date,
                     icon = weatherIcon(day.weatherCode),
+                    weatherName = weatherLabel(day.weatherCode),
                     high = day.maxTemperatureC,
                     low = day.minTemperatureC,
                     probability = day.effectiveMaxProbability(dayHours),
@@ -144,6 +146,14 @@ private fun WeatherSquareWidgetContent(snapshot: WeatherSnapshot?) {
                     modifier = GlanceModifier.width(dayWidth),
                 )
             }
+        }
+        if (!compact) {
+            Spacer(GlanceModifier.height(3.dp))
+            Text(
+                "更新 ${formatHourMinute(snapshot.updatedAtMillis)}",
+                style = widgetText(9, muted = true),
+                maxLines = 1,
+            )
         }
     }
 }
@@ -153,6 +163,7 @@ private fun SquareForecastDay(
     relativeLabel: String,
     date: String,
     icon: String,
+    weatherName: String,
     high: Double?,
     low: Double?,
     probability: Int?,
@@ -169,6 +180,13 @@ private fun SquareForecastDay(
             maxLines = 1,
         )
         Text(icon, style = widgetText(if (compact) 32 else 43), maxLines = 1)
+        if (!compact) {
+            Text(
+                weatherName,
+                style = widgetText(10, bold = true),
+                maxLines = 1,
+            )
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "${high?.roundText() ?: "--"}°",

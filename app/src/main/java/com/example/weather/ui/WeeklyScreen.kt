@@ -33,7 +33,7 @@ fun WeeklyScreen(snapshot: WeatherSnapshot?) {
             Text("データがありません", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column
         }
-        Text("AM / PMの概況を表示します。カードを押すと詳細を表示します。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("AM / PMの概況を表示します。日付を押すと1時間ごとの予報を表示します。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(snapshot.daily.take(14)) { day ->
                 WeeklyRow(day = day, dayHours = snapshot.hourly.forDate(day.date), onClick = { selectedDay = day })
@@ -41,6 +41,11 @@ fun WeeklyScreen(snapshot: WeatherSnapshot?) {
         }
     }
     selectedDay?.let { day ->
-        DayDetailDialog(day = day, dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(), onDismiss = { selectedDay = null })
+        DayDetailDialog(
+            day = day,
+            dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(),
+            timezone = snapshot?.timezone ?: "Asia/Tokyo",
+            onDismiss = { selectedDay = null },
+        )
     }
 }

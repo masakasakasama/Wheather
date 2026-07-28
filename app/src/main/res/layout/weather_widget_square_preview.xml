@@ -27,7 +27,7 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:gravity="center"
-            android:text="今日 7/28(火)&#10;🌧️&#10;30°  21°&#10;💧 60%"
+            android:text="今日 7/28(火)&#10;🌧️&#10;雨&#10;30°  21°&#10;💧 60%"
             android:textColor="#F4F4F4"
             android:textSize="14sp"
             android:textStyle="bold" />
@@ -37,9 +37,17 @@
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:gravity="center"
-            android:text="明日 7/29(水)&#10;🌤️&#10;35°  25°&#10;💧 40%"
+            android:text="明日 7/29(水)&#10;🌤️&#10;晴れ時々くもり&#10;35°  25°&#10;💧 40%"
             android:textColor="#F4F4F4"
             android:textSize="14sp"
             android:textStyle="bold" />
     </LinearLayout>
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="更新 10:14"
+        android:textColor="#B8B8B8"
+        android:textSize="9sp" />
 </LinearLayout>
