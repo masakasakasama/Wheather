@@ -10,6 +10,7 @@ data class ExpectedPrecipitation(
     val time: String,
     val probability: Int?,
     val amountMm: Double,
+    val periodMinutes: Int,
     val isCurrent: Boolean = false,
     val radarPrecipitation: RadarPrecipitation? = null,
 )
@@ -33,6 +34,7 @@ fun WeatherSnapshot.nextExpectedPrecipitation(
             time = current.time ?: now.toString(),
             probability = null,
             amountMm = radar.intensityLowerBoundMmPerHour,
+            periodMinutes = 60,
             isCurrent = true,
             radarPrecipitation = radar,
         )
@@ -42,6 +44,7 @@ fun WeatherSnapshot.nextExpectedPrecipitation(
             time = current.time ?: now.toString(),
             probability = null,
             amountMm = current.precipitationMm ?: 0.0,
+            periodMinutes = 15,
             isCurrent = true,
         )
     }
@@ -59,6 +62,7 @@ fun WeatherSnapshot.nextExpectedPrecipitation(
             time = minute.time,
             probability = minute.precipitationProbability,
             amountMm = minute.precipitationMm ?: 0.0,
+            periodMinutes = 15,
         )
     }
 
@@ -78,6 +82,7 @@ fun WeatherSnapshot.nextExpectedPrecipitation(
                 time = hour.time,
                 probability = hour.precipitationProbability,
                 amountMm = hour.precipitationMm ?: 0.0,
+                periodMinutes = 60,
             )
         }
 }

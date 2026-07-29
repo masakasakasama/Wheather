@@ -31,7 +31,10 @@ import androidx.glance.unit.ColorProvider
 import com.example.weather.AppServices
 import com.example.weather.MainActivity
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.effectiveMaxProbability
+import com.example.weather.data.model.effectivePrecipitationSum
 import com.example.weather.data.model.freshRadarPrecipitation
+import com.example.weather.data.model.forecastDays
 import com.example.weather.data.model.isRaining
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
@@ -121,7 +124,7 @@ private fun WeatherSquareWidgetContent(selectedLocationName: String, snapshot: W
     }
 
     val compact = size.height < 135.dp
-    val days = snapshot.daily.take(2)
+    val days = snapshot.forecastDays().take(2)
     val dayWidth = ((size.width.value - 18f) / 2f).dp
     Column(
         modifier,
@@ -268,8 +271,9 @@ private fun LargeWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
         MediumWidget(snapshot, GlanceModifier.fillMaxWidth())
         Spacer(GlanceModifier.height(8.dp))
         Text(
-            snapshot.daily.take(3).joinToString("  ") {
-                "${it.date.takeLast(5)} ${weatherIcon(it.weatherCode)} ${it.maxTemperatureC?.roundText() ?: "--"}/${it.minTemperatureC?.roundText() ?: "--"}° ${it.precipitationSumMm.mmText()}"
+            snapshot.forecastDays().take(3).joinToString("  ") { day ->
+                val dayHours = snapshot.hourly.filter { it.time.take(10) == day.date }
+                "${day.date.takeLast(5)} ${weatherIcon(day.weatherCode)} ${day.maxTemperatureC?.roundText() ?: "--"}/${day.minTemperatureC?.roundText() ?: "--"}° ${day.effectivePrecipitationSum(dayHours).mmText()}"
             },
             style = widgetText(12),
         )
@@ -302,15 +306,3 @@ private fun Double.roundText(): String = "%.0f".format(this)
 private fun Double.oneDecimal(): String = "%.1f".format(this)
 private fun Double?.mmText(): String = this?.let { "${it.oneDecimal()}mm" } ?: "--mm"
 private fun Int?.percentText(): String = this?.let { "$it%" } ?: "--%"
-private fun com.example.weather.data.model.DailyWeather?.effectiveMaxProbability(
-    dayHours: List<com.example.weather.data.model.HourlyWeather>,
-): Int? {
-    val hourlyMax = dayHours.mapNotNull { it.precipitationProbability }.maxOrNull()
-    return listOfNotNull(this?.maxPrecipitationProbability, hourlyMax).maxOrNull()
-}
-private fun com.example.weather.data.model.DailyWeather?.effectivePrecipitationSum(
-    dayHours: List<com.example.weather.data.model.HourlyWeather>,
-): Double? {
-    val hourlySum = dayHours.mapNotNull { it.precipitationMm }.sum().takeIf { it > 0.0 }
-    return listOfNotNull(this?.precipitationSumMm, hourlySum).maxOrNull()
-}

@@ -16,12 +16,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.forecastDays
 
 @Composable
 fun WeeklyScreen(snapshot: WeatherSnapshot?) {
-    var selectedDay by remember { mutableStateOf<DailyWeather?>(null) }
+    var selectedDayDate by remember { mutableStateOf<String?>(null) }
     Column(
         Modifier
             .fillMaxSize()
@@ -35,17 +35,19 @@ fun WeeklyScreen(snapshot: WeatherSnapshot?) {
         }
         Text("AM / PMの概況を表示します。日付を押すと1時間ごとの予報を表示します。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(snapshot.daily.take(14)) { day ->
-                WeeklyRow(day = day, dayHours = snapshot.hourly.forDate(day.date), onClick = { selectedDay = day })
+            items(snapshot.forecastDays().take(14), key = { it.date }) { day ->
+                WeeklyRow(day = day, dayHours = snapshot.hourly.forDate(day.date), onClick = { selectedDayDate = day.date })
             }
         }
     }
-    selectedDay?.let { day ->
+    selectedDayDate
+        ?.let { date -> snapshot?.forecastDays()?.firstOrNull { it.date == date } }
+        ?.let { day ->
         DayDetailDialog(
             day = day,
             dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(),
             timezone = snapshot?.timezone ?: "Asia/Tokyo",
-            onDismiss = { selectedDay = null },
+            onDismiss = { selectedDayDate = null },
         )
     }
 }

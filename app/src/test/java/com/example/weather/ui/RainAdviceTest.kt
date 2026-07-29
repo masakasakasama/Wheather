@@ -1,5 +1,11 @@
 package com.example.weather.ui
 
+import com.example.weather.data.model.CurrentWeather
+import com.example.weather.data.model.DailyWeather
+import com.example.weather.data.model.ExpectedPrecipitation
+import com.example.weather.data.model.HourlyWeather
+import com.example.weather.data.model.WeatherLocation
+import com.example.weather.data.model.WeatherSnapshot
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -28,5 +34,30 @@ class RainAdviceTest {
         assertEquals("雨量データなし", signal.label)
         assertEquals("判断不可", signal.action)
         assertFalse(signal.detail.contains("0.0mm"))
+    }
+
+    @Test
+    fun onsetAmountAndDailyTotalAreExplicitlySeparated() {
+        val hour = HourlyWeather("2026-07-31T17:00", 30.0, 76, 61, 0.1)
+        val snapshot = WeatherSnapshot(
+            location = WeatherLocation("テスト", 35.0, 139.0),
+            current = CurrentWeather(null, weatherCode = 3, precipitationMm = 0.0, time = null),
+            hourly = listOf(hour),
+            daily = listOf(
+                DailyWeather("2026-07-31", 61, 35.0, 27.0, 76, precipitationSumMm = 0.3),
+            ),
+            updatedAtMillis = 0L,
+        )
+        val expected = ExpectedPrecipitation(
+            time = hour.time,
+            probability = hour.precipitationProbability,
+            amountMm = 0.1,
+            periodMinutes = 60,
+        )
+
+        assertEquals(
+            "7/31 PM 5:00ごろから雨予報（その1時間 0.1mm / 7/31一日合計 0.3mm）",
+            expectedPrecipitationText(snapshot, expected),
+        )
     }
 }

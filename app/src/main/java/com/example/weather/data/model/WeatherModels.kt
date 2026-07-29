@@ -2,6 +2,7 @@ package com.example.weather.data.model
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 
 @Serializable
 data class WeatherLocation(
@@ -271,7 +272,31 @@ val PresetLocations = listOf(
     WeatherLocation("札幌", 43.0618, 141.3545),
 )
 
-fun WeatherSnapshot.today(): DailyWeather? = daily.firstOrNull()
+fun WeatherSnapshot.forecastDays(
+    today: LocalDate = LocalDate.now(forecastZoneId()),
+): List<DailyWeather> = daily
+    .mapNotNull { day ->
+        runCatching { LocalDate.parse(day.date) }.getOrNull()?.let { it to day }
+    }
+    .filter { (date) -> !date.isBefore(today) }
+    .distinctBy { (date) -> date }
+    .sortedBy { (date) -> date }
+    .map { (_, day) -> day }
+
+fun WeatherSnapshot.today(
+    today: LocalDate = LocalDate.now(forecastZoneId()),
+): DailyWeather? = daily.firstOrNull { it.date == today.toString() }
+
+fun DailyWeather?.effectiveMaxProbability(dayHours: List<HourlyWeather>): Int? {
+    val hourlyMax = dayHours.mapNotNull { it.precipitationProbability }.maxOrNull()
+    return listOfNotNull(this?.maxPrecipitationProbability, hourlyMax).maxOrNull()
+}
+
+fun DailyWeather?.effectivePrecipitationSum(dayHours: List<HourlyWeather>): Double? {
+    val hourlyValues = dayHours.mapNotNull { it.precipitationMm }
+    val hourlySum = hourlyValues.takeIf { it.isNotEmpty() }?.sum()
+    return listOfNotNull(this?.precipitationSumMm, hourlySum).maxOrNull()
+}
 
 fun weatherIcon(code: Int?): String = when (code) {
     0 -> "☀️"

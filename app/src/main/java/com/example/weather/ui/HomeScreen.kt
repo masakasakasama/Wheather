@@ -73,6 +73,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -100,6 +101,7 @@ import com.example.weather.WeatherUiState
 import com.example.weather.data.model.AirQuality
 import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.DisasterSummary
+import com.example.weather.data.model.ExpectedPrecipitation
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.MinutelyWeather
 import com.example.weather.data.model.NotificationSettings
@@ -108,6 +110,9 @@ import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.sameSavedPlaceAs
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.freshRadarPrecipitation
+import com.example.weather.data.model.effectiveMaxProbability
+import com.example.weather.data.model.effectivePrecipitationSum
+import com.example.weather.data.model.forecastDays
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.hasMeasurablePrecipitation
 import com.example.weather.data.model.intensityLabel
@@ -143,7 +148,7 @@ fun HomeScreen(
 ) {
     var showLocationDialog by remember { mutableStateOf(false) }
     var showSettingsDialog by remember { mutableStateOf(false) }
-    var selectedDay by remember { mutableStateOf<DailyWeather?>(null) }
+    var selectedDayDate by remember { mutableStateOf<String?>(null) }
     val snapshot = state.snapshot
     val disasterSummary = state.disasterSummary
     val uriHandler = LocalUriHandler.current
@@ -184,6 +189,7 @@ fun HomeScreen(
                 Text("天気を取得しています", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         } else {
+            val displayDays = snapshot.forecastDays().take(14)
             if (disasterSummary?.hasImportantInfo == true) {
                 item {
                     DisasterSummaryCard(
@@ -194,13 +200,13 @@ fun HomeScreen(
                     )
                 }
             }
-            item { DailyForecastPanel(snapshot) }
+            item { DailyForecastPanel(snapshot, displayDays) }
             item { CurrentConditionsPanel(snapshot) }
             item {
                 HomeWeeklySection(
-                    days = snapshot.daily.take(14),
+                    days = displayDays,
                     hourly = snapshot.hourly,
-                    onDayClick = { selectedDay = it },
+                    onDayClick = { selectedDayDate = it.date },
                 )
             }
             item {
@@ -250,12 +256,14 @@ fun HomeScreen(
         )
     }
 
-    selectedDay?.let { day ->
+    selectedDayDate
+        ?.let { date -> snapshot?.forecastDays()?.firstOrNull { it.date == date } }
+        ?.let { day ->
         DayDetailDialog(
             day = day,
             dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(),
             timezone = snapshot?.timezone ?: "Asia/Tokyo",
-            onDismiss = { selectedDay = null },
+            onDismiss = { selectedDayDate = null },
         )
     }
 }
@@ -407,8 +415,8 @@ private fun HomeHeader(
 }
 
 @Composable
-private fun DailyForecastPanel(snapshot: WeatherSnapshot) {
-    val days = snapshot.daily.take(2)
+private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<DailyWeather>) {
+    val days = displayDays.take(2)
     val hours = snapshot.hourly.nextHours(snapshot.hourly.size, snapshot.timezone)
     val today = snapshot.today()
     SectionCard(containerColor = WeatherPalette.ForecastSurface) {
@@ -418,7 +426,7 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot) {
                     DailyForecastColumn(
                         day = day,
                         dayHours = snapshot.hourly.forDate(day.date),
-                        index = index,
+                        relativeLabel = relativeDayLabel(day.date, snapshot.timezone),
                         modifier = Modifier.weight(1f),
                     )
                     if (index == 0 && days.size > 1) {
@@ -443,11 +451,10 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot) {
 private fun DailyForecastColumn(
     day: DailyWeather,
     dayHours: List<HourlyWeather>,
-    index: Int,
+    relativeLabel: String?,
     modifier: Modifier = Modifier,
 ) {
     val probability = day.effectiveMaxProbability(dayHours)
-    val relative = if (index == 0) "今日" else "明日"
     Column(
         modifier.padding(horizontal = 12.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -455,7 +462,7 @@ private fun DailyForecastColumn(
     ) {
         WeekendDateLabel(
             date = day.date,
-            prefix = relative,
+            prefix = relativeLabel,
             fontSizeSp = 17,
             fontWeight = FontWeight.Bold,
         )
@@ -501,6 +508,14 @@ private fun ForecastTip(snapshot: WeatherSnapshot) {
     val remainingProbability = remainingToday.mapNotNull { it.precipitationProbability }.maxOrNull()
     val remainingAmount = remainingToday.mapNotNull { it.precipitationMm }.takeIf { it.isNotEmpty() }?.sum()
     val signal = rainSignal(remainingProbability, remainingAmount)
+    val expected = snapshot.nextExpectedPrecipitation(maxHours = 48)
+    val expectedDate = expected?.time?.let { runCatching { LocalDateTime.parse(it).toLocalDate() }.getOrNull() }
+    val todayDate = LocalDate.now(snapshot.forecastZoneId())
+    val action = if (expected != null && !expected.isCurrent && expectedDate != todayDate) {
+        "今日は傘不要寄り"
+    } else {
+        signal.action
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -511,9 +526,9 @@ private fun ForecastTip(snapshot: WeatherSnapshot) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(9.dp),
     ) {
-        Text(if (signal.action.contains("傘")) "☂️" else "💡", fontSize = 20.sp)
+        Text(if (action == "傘を持つ") "☂️" else "💡", fontSize = 20.sp)
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(signal.action, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = signal.color)
+            Text(action, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = signal.color)
             Text(nextRainText(snapshot), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -530,10 +545,17 @@ fun HourlyForecastTable(hours: List<HourlyWeather>, timezone: String = "Asia/Tok
         return
     }
     val listState = rememberLazyListState()
+    val visibleDate by remember(hours, listState) {
+        derivedStateOf {
+            hours.getOrNull(listState.firstVisibleItemIndex)
+                ?.time
+                ?.let { runCatching { LocalDateTime.parse(it).toLocalDate() }.getOrNull() }
+        }
+    }
     val lastTime = hours.lastOrNull()?.time?.let(::formatDateHourLabel) ?: "不明"
     Column {
         Text(
-            "${hours.size}時間分・$lastTime まで",
+            "表示中 ${visibleDate?.let { formatDateWithWeekday(it.toString()) } ?: "--"} ・ ${hours.size}時間分・$lastTime まで",
             modifier = Modifier.padding(start = 48.dp, top = 8.dp, bottom = 2.dp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             fontSize = 11.sp,
@@ -2128,13 +2150,7 @@ private fun LabelValueRow(label: String, value: String, color: Color) {
 fun nextRainText(snapshot: WeatherSnapshot): String {
     val expected = snapshot.nextExpectedPrecipitation(maxHours = 48)
     if (expected != null) {
-        return if (expected.isCurrent) {
-            expected.radarPrecipitation?.let { radar ->
-                "現在、${radar.intensityLabel()}（レーダー ${radar.intensityLowerBoundMmPerHour.oneDecimal()}mm/h以上）"
-            } ?: "現在、雨が降っています（${expected.amountMm.mmText()}）"
-        } else {
-            "${formatDateMinuteLabel(expected.time)}ごろから雨予報（${expected.amountMm.mmText()}）"
-        }
+        return expectedPrecipitationText(snapshot, expected)
     }
     val maxProbability = snapshot.maxPrecipitationProbabilityFromNow(maxHours = 48)
     val hasAmountData = snapshot.minutely15.any { it.precipitationMm != null } ||
@@ -2143,6 +2159,32 @@ fun nextRainText(snapshot: WeatherSnapshot): String {
         !hasAmountData -> "48時間の雨量データなし${maxProbability?.let { "（確率最大$it%）" }.orEmpty()}"
         maxProbability != null -> "48時間の予想雨量は0.0mm（確率最大$maxProbability%）"
         else -> "48時間の雨予報はありません"
+    }
+}
+
+fun expectedPrecipitationText(snapshot: WeatherSnapshot, expected: ExpectedPrecipitation): String {
+    if (expected.isCurrent) {
+        return expected.radarPrecipitation?.let { radar ->
+            "現在、${radar.intensityLabel()}（レーダー ${radar.intensityLowerBoundMmPerHour.oneDecimal()}mm/h以上）"
+        } ?: "現在、雨が降っています（直近${expected.periodMinutes}分 ${expected.amountMm.mmText()}）"
+    }
+    val date = expected.time.take(10)
+    val dailyTotal = snapshot.daily
+        .firstOrNull { it.date == date }
+        .effectivePrecipitationSum(snapshot.hourly.forDate(date))
+    val period = if (expected.periodMinutes == 60) "その1時間" else "その${expected.periodMinutes}分"
+    val dailyDetail = dailyTotal?.let { " / ${formatDateShort(date)}一日合計 ${it.mmText()}" }.orEmpty()
+    return "${formatDateMinuteLabel(expected.time)}ごろから雨予報（$period ${expected.amountMm.mmText()}$dailyDetail）"
+}
+
+fun relativeDayLabel(date: String, timezone: String): String? {
+    val target = runCatching { LocalDate.parse(date) }.getOrNull() ?: return null
+    val zone = runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.of("Asia/Tokyo"))
+    val today = LocalDate.now(zone)
+    return when (target) {
+        today -> "今日"
+        today.plusDays(1) -> "明日"
+        else -> null
     }
 }
 
@@ -2639,15 +2681,4 @@ fun windDirectionText(degrees: Int?): String {
     val labels = listOf("北", "北東", "東", "南東", "南", "南西", "西", "北西")
     val index = (((degrees % 360) + 22.5) / 45.0).toInt() % labels.size
     return labels[index]
-}
-
-fun DailyWeather?.effectiveMaxProbability(dayHours: List<HourlyWeather>): Int? {
-    val hourlyMax = dayHours.mapNotNull { it.precipitationProbability }.maxOrNull()
-    return listOfNotNull(this?.maxPrecipitationProbability, hourlyMax).maxOrNull()
-}
-
-fun DailyWeather?.effectivePrecipitationSum(dayHours: List<HourlyWeather>): Double? {
-    val hourlyValues = dayHours.mapNotNull { it.precipitationMm }
-    val hourlySum = hourlyValues.takeIf { it.isNotEmpty() }?.sum()
-    return listOfNotNull(this?.precipitationSumMm, hourlySum).maxOrNull()
 }

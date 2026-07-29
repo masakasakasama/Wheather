@@ -23,6 +23,7 @@ class PrecipitationRulesTest {
 
         assertEquals("2026-07-28T17:00", result?.time)
         assertEquals(0.4, result?.amountMm)
+        assertEquals(60, result?.periodMinutes)
     }
 
     @Test
@@ -38,6 +39,7 @@ class PrecipitationRulesTest {
         val result = snapshot.nextExpectedPrecipitation(now = now)
 
         assertEquals("2026-07-28T10:30", result?.time)
+        assertEquals(15, result?.periodMinutes)
     }
 
     @Test
