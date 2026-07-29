@@ -60,4 +60,12 @@ class RainAdviceTest {
             expectedPrecipitationText(snapshot, expected),
         )
     }
+
+    @Test
+    fun temperatureDifferenceMatchesDisplayedRoundedValues() {
+        assertEquals("[+2]", temperatureDifferenceText(current = 30.6, previous = 28.6))
+        assertEquals("[0]", temperatureDifferenceText(current = 30.4, previous = 30.2))
+        assertEquals("[-2]", temperatureDifferenceText(current = 27.4, previous = 29.3))
+        assertEquals(null, temperatureDifferenceText(current = 30.0, previous = null))
+    }
 }

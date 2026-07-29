@@ -129,6 +129,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -423,8 +424,11 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
         Column {
             Row(Modifier.fillMaxWidth()) {
                 days.forEachIndexed { index, day ->
+                    val previousDate = runCatching { LocalDate.parse(day.date).minusDays(1).toString() }.getOrNull()
+                    val previousDay = snapshot.daily.firstOrNull { it.date == previousDate }
                     DailyForecastColumn(
                         day = day,
+                        previousDay = previousDay,
                         dayHours = snapshot.hourly.forDate(day.date),
                         relativeLabel = relativeDayLabel(day.date, snapshot.timezone),
                         modifier = Modifier.weight(1f),
@@ -433,7 +437,7 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
                         Box(
                             Modifier
                                 .width(1.dp)
-                                .height(214.dp)
+                                .height(232.dp)
                                 .background(WeatherPalette.Outline),
                         )
                     }
@@ -450,6 +454,7 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
 @Composable
 private fun DailyForecastColumn(
     day: DailyWeather,
+    previousDay: DailyWeather?,
     dayHours: List<HourlyWeather>,
     relativeLabel: String?,
     modifier: Modifier = Modifier,
@@ -482,21 +487,50 @@ private fun DailyForecastColumn(
                 Text(probability.percentText(), fontSize = 15.sp)
             }
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.Bottom) {
-            Text(
-                "${day.maxTemperatureC?.roundText() ?: "--"}°",
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
+            TemperatureWithPreviousDay(
+                temperature = day.maxTemperatureC,
+                previousTemperature = previousDay?.maxTemperatureC,
                 color = WeatherPalette.HighTemperature,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold,
             )
-            Text(
-                "${day.minTemperatureC?.roundText() ?: "--"}°",
+            TemperatureWithPreviousDay(
+                temperature = day.minTemperatureC,
+                previousTemperature = previousDay?.minTemperatureC,
                 color = WeatherPalette.LowTemperature,
-                fontSize = 22.sp,
-                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Text("最高・最低とも前日比", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun TemperatureWithPreviousDay(
+    temperature: Double?,
+    previousTemperature: Double?,
+    color: Color,
+) {
+    Row(verticalAlignment = Alignment.Bottom, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        Text(
+            "${temperature?.roundText() ?: "--"}°",
+            color = color,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+        )
+        temperatureDifferenceText(temperature, previousTemperature)?.let { difference ->
+            Text(
+                difference,
+                color = color.copy(alpha = 0.78f),
+                fontSize = 11.sp,
+                modifier = Modifier.padding(bottom = 2.dp),
             )
         }
     }
+}
+
+fun temperatureDifferenceText(current: Double?, previous: Double?): String? {
+    if (current == null || previous == null) return null
+    val difference = current.roundToInt() - previous.roundToInt()
+    return "[${if (difference > 0) "+" else ""}$difference]"
 }
 
 @Composable
@@ -1716,7 +1750,7 @@ private fun isCurrentHour(time: String, timezone: String = "Asia/Tokyo"): Boolea
 private fun HomeWeeklySection(days: List<DailyWeather>, hourly: List<HourlyWeather>, onDayClick: (DailyWeather) -> Unit) {
     val remainingDays = days.drop(2)
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        SectionHeader("2週間天気", "今日・明日以降の見通し")
+        SectionHeader("2週間天気", "日付・天気・最高・最低・降水")
         SectionCard(containerColor = WeatherPalette.ForecastSurface) {
             Column(Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 remainingDays.forEachIndexed { index, day ->
@@ -1737,63 +1771,52 @@ fun WeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, onClick: () -> U
 
 @Composable
 private fun CompactWeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, onClick: () -> Unit) {
-    val parts = dayPeriodSummaries(dayHours)
     val maxProbability = day.effectiveMaxProbability(dayHours)
-    val precipitationSum = day.effectivePrecipitationSum(dayHours)
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = 11.dp),
+            .padding(vertical = 10.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.width(78.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
-            WeekendDateLabel(
-                date = day.date,
-                fontSizeSp = 15,
-                fontWeight = FontWeight.Normal,
-            )
-            Text(weatherLabel(day.weatherCode), fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+        WeekendDateLabel(
+            date = day.date,
+            fontSizeSp = 15,
+            fontWeight = FontWeight.Normal,
+            modifier = Modifier.width(88.dp),
+        )
         WeatherGlyph(
             code = day.weatherCode,
-            size = 38.dp,
-            modifier = Modifier.width(42.dp),
+            size = 42.dp,
+            modifier = Modifier.width(48.dp),
         )
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(5.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    "${day.maxTemperatureC?.roundText() ?: "--"}°",
-                    color = WeatherPalette.HighTemperature,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Text(
-                    "${day.minTemperatureC?.roundText() ?: "--"}°",
-                    color = WeatherPalette.LowTemperature,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.SemiBold,
-                )
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                    Icon(
-                        Icons.Outlined.WaterDrop,
-                        contentDescription = null,
-                        tint = WeatherPalette.Rain,
-                        modifier = Modifier.size(14.dp),
-                    )
-                    Text(maxProbability.percentText(), fontSize = 15.sp)
-                }
-            }
+        Row(
+            Modifier.weight(1f),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
             Text(
-                "AM ${parts.first.maxProbability.percentText()}  PM ${parts.second.maxProbability.percentText()}  ${precipitationSum.mmText()}",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 11.sp,
+                "${day.maxTemperatureC?.roundText() ?: "--"}°",
+                color = WeatherPalette.HighTemperature,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
             )
+            Text(
+                "${day.minTemperatureC?.roundText() ?: "--"}°",
+                color = WeatherPalette.LowTemperature,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                Icon(
+                    Icons.Outlined.WaterDrop,
+                    contentDescription = null,
+                    tint = WeatherPalette.Rain,
+                    modifier = Modifier.size(14.dp),
+                )
+                Text(maxProbability.percentText(), fontSize = 15.sp)
+            }
         }
         Icon(
             Icons.Outlined.ChevronRight,
@@ -2264,11 +2287,13 @@ private fun WeekendDateLabel(
     prefix: String? = null,
     fontSizeSp: Int,
     fontWeight: FontWeight,
+    modifier: Modifier = Modifier,
 ) {
     val parsed = runCatching { LocalDate.parse(date) }.getOrNull()
     if (parsed == null) {
         Text(
             listOfNotNull(prefix, date).joinToString(" "),
+            modifier = modifier,
             fontSize = fontSizeSp.sp,
             fontWeight = fontWeight,
         )
@@ -2280,7 +2305,7 @@ private fun WeekendDateLabel(
         java.time.DayOfWeek.SUNDAY -> WeatherPalette.HighTemperature
         else -> MaterialTheme.colorScheme.onSurface
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         if (prefix != null) {
             Text(
                 "$prefix ",

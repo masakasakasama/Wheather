@@ -70,6 +70,7 @@ class OpenMeteoClient(
             .addQueryParameter("hourly", "temperature_2m,precipitation_probability,weather_code,precipitation,relative_humidity_2m,wind_speed_10m,wind_direction_10m")
             .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset")
             .addQueryParameter("forecast_days", "14")
+            .addQueryParameter("past_days", "1")
             .addQueryParameter("forecast_minutely_15", "16")
             .addQueryParameter("timezone", "auto")
         if (useJmaModel) builder.addQueryParameter("models", "jma_seamless")
