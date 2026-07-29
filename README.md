@@ -46,6 +46,7 @@ gradle assembleDebug
 - ホーム上部の現在地ボタンから、保存地点リストを開かずに現在地へ戻れます。位置情報未許可の場合は権限確認を表示します。
 - 日本国内の「現在降っているか」は気象庁高解像度降水ナウキャストの最新タイルを優先します。地点周辺約400mの8段階の降水強度を解析し、観測時刻と`mm/h以上`を表示します。
 - 気象庁レーダーが取得できない場合や日本国外ではOpen-Meteoへフォールバックします。レーダーの非降水エコーや観測休止により実際と異なる場合があります。
+- 降水確率だけでは傘を推奨しません。レーダー降雨なし・24時間予想雨量0.0mmなら、確率が100%でも「予報不一致」「傘は不要寄り」と表示します。雨量データが欠けている場合は「判断不可」と区別します。
 
 - Open-Meteo Forecast API
   - `current`: `temperature_2m`, `apparent_temperature`, `relative_humidity_2m`, `weather_code`, `precipitation`, `wind_speed_10m`, `wind_direction_10m`, `pressure_msl`

@@ -2319,10 +2319,8 @@ fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>
     val next24Hours = next48Hours.take(24)
     val maxProbability = next24Hours.mapNotNull { it.precipitationProbability }.maxOrNull()
     val precipitationSum = next24Hours.mapNotNull { it.precipitationMm }.takeIf { it.isNotEmpty() }?.sum()
+    val hasPrecipitationAmountData = next24Hours.any { it.precipitationMm != null }
     val nextRain = snapshot.nextExpectedPrecipitation(maxHours = 24)
-    val peakRainHour = next24Hours.maxByOrNull {
-        maxOf((it.precipitationProbability ?: 0).toDouble(), (it.precipitationMm ?: 0.0) * 100.0)
-    }
     val maxTemp = today?.maxTemperatureC ?: next24Hours.mapNotNull { it.temperatureC }.maxOrNull()
     val minTemp = today?.minTemperatureC ?: next24Hours.mapNotNull { it.temperatureC }.minOrNull()
     val apparent = snapshot.current.apparentTemperatureC ?: snapshot.current.temperatureC
@@ -2344,16 +2342,22 @@ fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>
             },
             color = Color(0xFF26313A),
         )
-        (maxProbability ?: 0) >= 30 -> DailyAdvice(
+        (precipitationSum ?: 0.0) >= 0.1 -> DailyAdvice(
             label = "傘",
-            value = "折りたたみ",
-            detail = "24h最大 ${maxProbability.percentText()}${peakRainHour?.time?.let { " (${formatDateHourLabel(it)})" }.orEmpty()}",
+            value = "持つ",
+            detail = "24h ${maxProbability.percentText()} / ${precipitationSum.mmText()}",
             color = Color(0xFF222831),
+        )
+        !hasPrecipitationAmountData -> DailyAdvice(
+            label = "傘",
+            value = "判断不可",
+            detail = "雨量データなし / 確率最大 ${maxProbability.percentText()}",
+            color = Color(0xFF272624),
         )
         else -> DailyAdvice(
             label = "傘",
             value = "不要寄り",
-            detail = "24h最大 ${maxProbability.percentText()} / ${precipitationSum.mmText()}",
+            detail = "予想雨量 ${precipitationSum.mmText()} / 確率最大 ${maxProbability.percentText()}",
             color = Color(0xFF1D241E),
         )
     }
@@ -2365,10 +2369,10 @@ fun buildDailyAdvice(snapshot: WeatherSnapshot, next48Hours: List<HourlyWeather>
             detail = "降水 ${maxProbability.percentText()} / ${precipitationSum.mmText()}",
             color = Color(0xFF2B2327),
         )
-        (maxProbability ?: 0) >= 50 -> DailyAdvice(
+        !hasPrecipitationAmountData -> DailyAdvice(
             label = "洗濯",
-            value = "外干し注意",
-            detail = "確率 ${maxProbability.percentText()} / 予想雨量 ${precipitationSum.mmText()}",
+            value = "雨量待ち",
+            detail = "確率 ${maxProbability.percentText()} / 雨量データなし",
             color = Color(0xFF272624),
         )
         (humidity ?: 0) >= 75 -> DailyAdvice(
@@ -2510,16 +2514,22 @@ fun rainSignal(probability: Int?, precipitationMm: Double?): RainSignal {
             detail = "降り出す時刻を確認",
             color = Color(0xFF64D2FF),
         )
+        precipitationMm == null -> RainSignal(
+            label = "雨量データなし",
+            action = "判断不可",
+            detail = "降水確率 ${probability.percentText()}",
+            color = Color(0xFFC7C7CC),
+        )
         probabilityValue >= 70 -> RainSignal(
-            label = "確率高め・雨量なし",
-            action = "折りたたみ",
-            detail = "雨量0.0mmなら断定しない",
+            label = "予報不一致",
+            action = "雨量予測なし",
+            detail = "確率は高いが予想雨量0.0mm",
             color = Color(0xFFBFFF3C),
         )
         probabilityValue >= 40 -> RainSignal(
-            label = "降るかも",
-            action = "折りたたみ",
-            detail = "短時間の雨に備える",
+            label = "確率のみ",
+            action = "判断保留",
+            detail = "予想雨量0.0mm",
             color = Color(0xFFBFFF3C),
         )
         else -> RainSignal(
