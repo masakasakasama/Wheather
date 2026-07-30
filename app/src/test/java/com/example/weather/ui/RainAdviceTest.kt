@@ -68,4 +68,11 @@ class RainAdviceTest {
         assertEquals("[-2]", temperatureDifferenceText(current = 27.4, previous = 29.3))
         assertEquals(null, temperatureDifferenceText(current = 30.0, previous = null))
     }
+
+    @Test
+    fun radarRateKeepsSubMillimeterIntensityVisible() {
+        assertEquals("0.1", radarRateText(0.1))
+        assertEquals("80", radarRateText(80.0))
+        assertEquals("--", radarRateText(null))
+    }
 }

@@ -31,11 +31,10 @@ import androidx.glance.unit.ColorProvider
 import com.example.weather.AppServices
 import com.example.weather.MainActivity
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.effectiveCurrentWeatherCode
 import com.example.weather.data.model.effectiveMaxProbability
 import com.example.weather.data.model.effectivePrecipitationSum
-import com.example.weather.data.model.freshRadarPrecipitation
 import com.example.weather.data.model.forecastDays
-import com.example.weather.data.model.isRaining
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
 import com.example.weather.data.model.weatherLabel
@@ -217,11 +216,7 @@ private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
     val todayHours = today?.let { day ->
         snapshot.hourly.filter { it.time.take(10) == day.date }
     }.orEmpty()
-    val currentWeatherCode = if (snapshot.freshRadarPrecipitation()?.isRaining() == true) {
-        65
-    } else {
-        snapshot.current.weatherCode
-    }
+    val currentWeatherCode = snapshot.effectiveCurrentWeatherCode()
     Column(modifier) {
         Text(
             "📍 ${snapshot.location.name.substringBefore(" (")}",

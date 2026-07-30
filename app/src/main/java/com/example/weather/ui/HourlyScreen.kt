@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.freshRadarPrecipitation
 
 @Composable
 fun HourlyScreen(snapshot: WeatherSnapshot?) {
@@ -43,7 +44,7 @@ fun HourlyScreen(snapshot: WeatherSnapshot?) {
             colors = CardDefaults.cardColors(containerColor = WeatherPalette.ForecastSurface),
             shape = MaterialTheme.shapes.medium,
         ) {
-            HourlyForecastTable(hours, snapshot.timezone)
+            HourlyForecastTable(hours, snapshot.timezone, snapshot.freshRadarPrecipitation())
         }
     }
 }

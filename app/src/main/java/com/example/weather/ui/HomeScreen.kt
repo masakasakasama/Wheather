@@ -106,12 +106,15 @@ import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.MinutelyWeather
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.PresetLocations
+import com.example.weather.data.model.RadarPrecipitation
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.sameSavedPlaceAs
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.freshRadarPrecipitation
 import com.example.weather.data.model.effectiveMaxProbability
 import com.example.weather.data.model.effectivePrecipitationSum
+import com.example.weather.data.model.effectiveCurrentWeatherCode
+import com.example.weather.data.model.effectiveCurrentWeatherLabel
 import com.example.weather.data.model.forecastDays
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.hasMeasurablePrecipitation
@@ -119,6 +122,7 @@ import com.example.weather.data.model.intensityLabel
 import com.example.weather.data.model.isRaining
 import com.example.weather.data.model.maxPrecipitationProbabilityFromNow
 import com.example.weather.data.model.nextExpectedPrecipitation
+import com.example.weather.data.model.radarObservationStatus
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
 import com.example.weather.data.model.weatherLabel
@@ -264,6 +268,7 @@ fun HomeScreen(
             day = day,
             dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(),
             timezone = snapshot?.timezone ?: "Asia/Tokyo",
+            radarPrecipitation = snapshot?.freshRadarPrecipitation(),
             onDismiss = { selectedDayDate = null },
         )
     }
@@ -420,8 +425,17 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
     val days = displayDays.take(2)
     val hours = snapshot.hourly.nextHours(snapshot.hourly.size, snapshot.timezone)
     val today = snapshot.today()
+    val radar = snapshot.freshRadarPrecipitation()
+    val isJapanRadarArea = snapshot.location.latitude in 20.0..48.0 &&
+        snapshot.location.longitude in 118.0..150.0
+    val showRadarStatus = radar?.isRaining() == true ||
+        (isJapanRadarArea && radar == null)
     SectionCard(containerColor = WeatherPalette.ForecastSurface) {
         Column {
+            if (showRadarStatus) {
+                CurrentRadarStatusBanner(snapshot)
+                HorizontalDivider(color = WeatherPalette.Outline)
+            }
             Row(Modifier.fillMaxWidth()) {
                 days.forEachIndexed { index, day ->
                     val previousDate = runCatching { LocalDate.parse(day.date).minusDays(1).toString() }.getOrNull()
@@ -431,13 +445,14 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
                         previousDay = previousDay,
                         dayHours = snapshot.hourly.forDate(day.date),
                         relativeLabel = relativeDayLabel(day.date, snapshot.timezone),
+                        currentRadar = radar,
                         modifier = Modifier.weight(1f),
                     )
                     if (index == 0 && days.size > 1) {
                         Box(
                             Modifier
                                 .width(1.dp)
-                                .height(232.dp)
+                                .height(248.dp)
                                 .background(WeatherPalette.Outline),
                         )
                     }
@@ -445,8 +460,41 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
             }
             ForecastTip(snapshot)
             HorizontalDivider(color = WeatherPalette.Outline)
-            HourlyForecastTable(hours, snapshot.timezone)
+            HourlyForecastTable(hours, snapshot.timezone, radar)
             SunTimesRow(sunrise = today?.sunrise, sunset = today?.sunset)
+        }
+    }
+}
+
+@Composable
+private fun CurrentRadarStatusBanner(snapshot: WeatherSnapshot) {
+    val isRaining = snapshot.freshRadarPrecipitation()?.isRaining() == true
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(if (isRaining) Color(0xFF381A1D) else Color(0xFF332B18))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Icon(
+            Icons.Filled.WarningAmber,
+            contentDescription = null,
+            tint = if (isRaining) Color(0xFFFF8A80) else Color(0xFFFFC857),
+            modifier = Modifier.size(22.dp),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                if (isRaining) snapshot.effectiveCurrentWeatherLabel() else "現在の雨を確認できません",
+                color = if (isRaining) Color(0xFFFFB4AB) else Color(0xFFFFDDA1),
+                fontSize = 17.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                snapshot.radarObservationStatus(),
+                color = Color.White.copy(alpha = 0.82f),
+                fontSize = 12.sp,
+            )
         }
     }
 }
@@ -457,9 +505,17 @@ private fun DailyForecastColumn(
     previousDay: DailyWeather?,
     dayHours: List<HourlyWeather>,
     relativeLabel: String?,
+    currentRadar: RadarPrecipitation?,
     modifier: Modifier = Modifier,
 ) {
     val probability = day.effectiveMaxProbability(dayHours)
+    val isObservedRain = relativeLabel == "今日" && currentRadar?.isRaining() == true
+    val displayWeatherCode = if (isObservedRain) 65 else day.weatherCode
+    val displayWeatherLabel = if (isObservedRain) {
+        "現在 ${currentRadar?.intensityLabel()}"
+    } else {
+        weatherLabel(day.weatherCode)
+    }
     Column(
         modifier.padding(horizontal = 12.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -471,12 +527,12 @@ private fun DailyForecastColumn(
             fontSizeSp = 17,
             fontWeight = FontWeight.Bold,
         )
-        WeatherGlyph(code = day.weatherCode, size = 80.dp)
+        WeatherGlyph(code = displayWeatherCode, size = 80.dp)
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text(weatherLabel(day.weatherCode), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+            Text(displayWeatherLabel, fontSize = 18.sp, fontWeight = FontWeight.Bold)
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Icon(
                     Icons.Outlined.WaterDrop,
@@ -497,6 +553,13 @@ private fun DailyForecastColumn(
                 temperature = day.minTemperatureC,
                 previousTemperature = previousDay?.minTemperatureC,
                 color = WeatherPalette.LowTemperature,
+            )
+        }
+        if (isObservedRain) {
+            Text(
+                "一日予報 ${weatherLabel(day.weatherCode)}",
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
         Text("最高・最低とも前日比", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -569,7 +632,11 @@ private fun ForecastTip(snapshot: WeatherSnapshot) {
 }
 
 @Composable
-fun HourlyForecastTable(hours: List<HourlyWeather>, timezone: String = "Asia/Tokyo") {
+fun HourlyForecastTable(
+    hours: List<HourlyWeather>,
+    timezone: String = "Asia/Tokyo",
+    radarPrecipitation: RadarPrecipitation? = null,
+) {
     if (hours.isEmpty()) {
         Text(
             "時間別予報を取得できません",
@@ -613,6 +680,8 @@ fun HourlyForecastTable(hours: List<HourlyWeather>, timezone: String = "Asia/Tok
                 state = listState,
             ) {
                 items(hours, key = { it.time }) { hour ->
+                    val isObservedRain = isCurrentHour(hour.time, timezone) &&
+                        radarPrecipitation?.isRaining() == true
                     Column(
                         Modifier.width(72.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
@@ -624,11 +693,29 @@ fun HourlyForecastTable(hours: List<HourlyWeather>, timezone: String = "Asia/Tok
                                 .height(48.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            WeatherGlyph(code = hour.weatherCode, size = 36.dp)
+                            WeatherGlyph(
+                                code = if (isObservedRain) 65 else hour.weatherCode,
+                                size = 36.dp,
+                            )
                         }
                         ForecastTableValue("${hour.temperatureC?.roundText() ?: "--"}°", 30, 14, true)
-                        ForecastTableValue(hour.precipitationProbability.percentText(), 30, 13, false, WeatherPalette.Rain)
-                        ForecastTableValue(hour.precipitationMm.mmText(), 30, 12, false)
+                        ForecastTableValue(
+                            if (isObservedRain) "観測" else hour.precipitationProbability.percentText(),
+                            30,
+                            13,
+                            isObservedRain,
+                            WeatherPalette.Rain,
+                        )
+                        ForecastTableValue(
+                            if (isObservedRain) {
+                                "${radarRateText(radarPrecipitation?.intensityLowerBoundMmPerHour)}+mm/h"
+                            } else {
+                                hour.precipitationMm.mmText()
+                            },
+                            30,
+                            if (isObservedRain) 10 else 12,
+                            isObservedRain,
+                        )
                         ForecastTableValue(hour.humidityPercent.percentText(), 30, 12, false)
                         ForecastWindValue(hour)
                     }
@@ -636,6 +723,12 @@ fun HourlyForecastTable(hours: List<HourlyWeather>, timezone: String = "Asia/Tok
             }
         }
     }
+}
+
+fun radarRateText(value: Double?): String = when {
+    value == null -> "--"
+    value < 1.0 -> value.oneDecimal()
+    else -> value.roundText()
 }
 
 @Composable
@@ -770,6 +863,9 @@ private fun ForecastTableValue(
 @Composable
 private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
     val today = snapshot.today()
+    val currentWeatherCode = snapshot.effectiveCurrentWeatherCode()
+    val currentWeatherLabel = snapshot.effectiveCurrentWeatherLabel()
+    val radar = snapshot.freshRadarPrecipitation()
     SectionCard(containerColor = WeatherPalette.ForecastSurface) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
@@ -780,12 +876,36 @@ private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                     Text("いまの天気", fontSize = 17.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        weatherLabel(snapshot.current.weatherCode),
+                        currentWeatherLabel,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         fontSize = 12.sp,
                     )
                 }
-                WeatherGlyph(code = snapshot.current.weatherCode, size = 48.dp)
+                WeatherGlyph(code = currentWeatherCode, size = 48.dp)
+            }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(5.dp))
+                    .background(
+                        if (radar?.isRaining() == true) Color(0xFF381A1D) else WeatherPalette.SurfaceVariant,
+                    )
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    if (radar?.isRaining() == true) Icons.Filled.WarningAmber else Icons.Outlined.WaterDrop,
+                    contentDescription = null,
+                    tint = if (radar?.isRaining() == true) Color(0xFFFF8A80) else WeatherPalette.Rain,
+                    modifier = Modifier.size(18.dp),
+                )
+                Text(
+                    snapshot.radarObservationStatus(),
+                    color = if (radar?.isRaining() == true) Color(0xFFFFB4AB) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 12.sp,
+                    fontWeight = if (radar?.isRaining() == true) FontWeight.Bold else FontWeight.Normal,
+                )
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 CurrentMetric("気温", snapshot.current.temperatureC.temperatureText(), Modifier.weight(1f), 29)
@@ -1148,7 +1268,7 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
     val remainingAmount = remainingToday.mapNotNull { it.precipitationMm }.takeIf { it.isNotEmpty() }?.sum()
     val radarPrecipitation = snapshot.freshRadarPrecipitation()
     val radarIsRaining = radarPrecipitation?.isRaining() == true
-    val currentWeatherCode = if (radarIsRaining) 65 else snapshot.current.weatherCode
+    val currentWeatherCode = snapshot.effectiveCurrentWeatherCode()
     val rainSignal = if (radarIsRaining) {
         rainSignal(100, radarPrecipitation?.intensityLowerBoundMmPerHour)
     } else {
@@ -1182,8 +1302,7 @@ private fun CurrentSummary(snapshot: WeatherSnapshot) {
             Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(weatherIcon(currentWeatherCode), fontSize = 56.sp)
                 Text(
-                    radarPrecipitation?.takeIf { it.isRaining() }?.intensityLabel()
-                        ?: weatherLabel(snapshot.current.weatherCode),
+                    snapshot.effectiveCurrentWeatherLabel(),
                     fontSize = 20.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = Color.White,
@@ -1918,6 +2037,7 @@ fun DayDetailDialog(
     day: DailyWeather,
     dayHours: List<HourlyWeather>,
     timezone: String = "Asia/Tokyo",
+    radarPrecipitation: RadarPrecipitation? = null,
     onDismiss: () -> Unit,
 ) {
     AlertDialog(
@@ -1933,7 +2053,7 @@ fun DayDetailDialog(
                 if (dayHours.isEmpty()) {
                     Text("この日の時間予報を取得できません")
                 } else {
-                    HourlyForecastTable(dayHours, timezone)
+                    HourlyForecastTable(dayHours, timezone, radarPrecipitation)
                 }
             }
         },

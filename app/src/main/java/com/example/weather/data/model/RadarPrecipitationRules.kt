@@ -43,3 +43,36 @@ fun WeatherSnapshot.freshRadarPrecipitation(
         nowMillis - it.observedAtMillis in 0..RadarFreshnessMillis
     }
 }
+
+fun WeatherSnapshot.effectiveCurrentWeatherCode(
+    nowMillis: Long = System.currentTimeMillis(),
+): Int? = if (freshRadarPrecipitation(nowMillis)?.isRaining() == true) {
+    65
+} else {
+    current.weatherCode
+}
+
+fun WeatherSnapshot.effectiveCurrentWeatherLabel(
+    nowMillis: Long = System.currentTimeMillis(),
+): String = freshRadarPrecipitation(nowMillis)
+    ?.takeIf { it.isRaining() }
+    ?.intensityLabel()
+    ?: weatherLabel(current.weatherCode)
+
+fun WeatherSnapshot.radarObservationStatus(
+    nowMillis: Long = System.currentTimeMillis(),
+): String {
+    val radar = freshRadarPrecipitation(nowMillis)
+    return when {
+        radar?.isRaining() == true ->
+            "レーダー観測 ${radar.intensityLabel()} ${radar.intensityLowerBoundMmPerHour.toCompactRadarNumber()}mm/h以上"
+        radar != null -> "レーダー観測 降雨なし"
+        radarPrecipitation != null -> "レーダー観測が古いため予報値を表示"
+        location.latitude in 20.0..48.0 && location.longitude in 118.0..150.0 ->
+            "レーダー取得失敗・予報値を表示"
+        else -> "レーダー対象外・予報値を表示"
+    }
+}
+
+private fun Double.toCompactRadarNumber(): String =
+    if (this % 1.0 == 0.0) toInt().toString() else toString()

@@ -18,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.forecastDays
+import com.example.weather.data.model.freshRadarPrecipitation
 
 @Composable
 fun WeeklyScreen(snapshot: WeatherSnapshot?) {
@@ -33,7 +34,7 @@ fun WeeklyScreen(snapshot: WeatherSnapshot?) {
             Text("データがありません", color = MaterialTheme.colorScheme.onSurfaceVariant)
             return@Column
         }
-        Text("AM / PMの概況を表示します。日付を押すと1時間ごとの予報を表示します。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("日付を押すと1時間ごとの予報を表示します。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             items(snapshot.forecastDays().take(14), key = { it.date }) { day ->
                 WeeklyRow(day = day, dayHours = snapshot.hourly.forDate(day.date), onClick = { selectedDayDate = day.date })
@@ -47,6 +48,7 @@ fun WeeklyScreen(snapshot: WeatherSnapshot?) {
             day = day,
             dayHours = snapshot?.hourly?.forDate(day.date).orEmpty(),
             timezone = snapshot?.timezone ?: "Asia/Tokyo",
+            radarPrecipitation = snapshot?.freshRadarPrecipitation(),
             onDismiss = { selectedDayDate = null },
         )
     }
