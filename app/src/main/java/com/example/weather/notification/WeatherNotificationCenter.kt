@@ -17,6 +17,7 @@ import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.displayLabel
 import com.example.weather.data.model.forecastAreaKey
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.freshRadarPrecipitation
@@ -92,12 +93,12 @@ class WeatherNotificationCenter(
             summary.officeName.orEmpty(),
             summary.warningHeadline.orEmpty(),
             summary.activeWarnings.joinToString("|"),
-            summary.typhoons.joinToString("|") { "${it.number}:${it.category}" },
+            summary.typhoons.joinToString("|") { it.displayLabel() },
         ).joinToString("#")
         if (!shouldNotify("disaster_signature", signature)) return
 
         val warningText = summary.activeWarnings.take(3).joinToString(" / ")
-        val typhoonText = summary.typhoons.take(2).joinToString(" / ") { "台風${it.number}号 ${it.category}" }
+        val typhoonText = summary.typhoons.take(2).joinToString(" / ") { it.displayLabel() }
         val text = listOf(warningText, typhoonText, summary.warningHeadline)
             .filterNot { it.isNullOrBlank() }
             .joinToString(" / ")

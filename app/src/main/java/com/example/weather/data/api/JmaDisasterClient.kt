@@ -89,13 +89,14 @@ class JmaDisasterClient(
 
     private fun JsonElement.toTyphoonSummary(): TyphoonSummary? {
         val item = (this as? JsonObject) ?: return null
-        val category = item["category"]?.jsonPrimitive?.contentOrNull.orEmpty()
-        if (category == "LOW") return null
-        val number = item["typhoonNumber"]?.jsonPrimitive?.contentOrNull ?: return null
+        val category = typhoonCategoryLabel(
+            item["category"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        ) ?: return null
+        val number = normalizeTyphoonNumber(item["typhoonNumber"]?.jsonPrimitive?.contentOrNull)
         val issue = item["issue"]?.jsonPrimitive?.contentOrNull.orEmpty()
         return TyphoonSummary(
-            number = number.takeLast(2).trimStart('0').ifBlank { number },
-            category = typhoonCategoryLabel(category),
+            number = number,
+            category = category,
             issueTime = issue,
         )
     }
@@ -207,12 +208,17 @@ private fun warningName(code: String): String = when (code) {
     else -> "警報・注意報$code"
 }
 
-private fun typhoonCategoryLabel(category: String): String = when (category) {
+internal fun normalizeTyphoonNumber(rawNumber: String?): String? {
+    val digits = rawNumber?.trim()?.takeIf { value ->
+        value.isNotEmpty() && value.all(Char::isDigit)
+    } ?: return null
+    return digits.takeLast(2).toIntOrNull()?.takeIf { it > 0 }?.toString()
+}
+
+internal fun typhoonCategoryLabel(category: String): String? = when (category) {
     "TD" -> "熱帯低気圧"
-    "TS" -> "台風"
-    "STS" -> "強い台風"
-    "TY" -> "非常に強い台風"
-    else -> category
+    "TS", "STS", "TY" -> "台風"
+    else -> null
 }
 
 private val Offices = listOf(

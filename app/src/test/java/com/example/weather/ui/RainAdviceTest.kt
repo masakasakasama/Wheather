@@ -70,6 +70,13 @@ class RainAdviceTest {
     }
 
     @Test
+    fun temperatureRangeDoesNotRepeatTheSameDisplayedValue() {
+        assertEquals(null, temperatureRangeText(low = 27.5, high = 28.4))
+        assertEquals("28〜29°", temperatureRangeText(low = 28.4, high = 28.6))
+        assertEquals(null, temperatureRangeText(low = 29.0, high = 28.0))
+    }
+
+    @Test
     fun radarRateKeepsSubMillimeterIntensityVisible() {
         assertEquals("0.1", radarRateText(0.1))
         assertEquals("80", radarRateText(80.0))

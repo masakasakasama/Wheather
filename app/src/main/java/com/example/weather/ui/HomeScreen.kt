@@ -117,6 +117,7 @@ import com.example.weather.data.model.effectiveMaxProbability
 import com.example.weather.data.model.effectivePrecipitationSum
 import com.example.weather.data.model.effectiveCurrentWeatherCode
 import com.example.weather.data.model.effectiveCurrentWeatherLabel
+import com.example.weather.data.model.displayLabel
 import com.example.weather.data.model.forecastDays
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.hasMeasurablePrecipitation
@@ -597,7 +598,6 @@ private fun DailyForecastColumn(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        Text("最高・最低とも前日比", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -632,8 +632,11 @@ fun temperatureDifferenceText(current: Double?, previous: Double?): String? {
 }
 
 fun temperatureRangeText(low: Double?, high: Double?): String? {
-    if (low == null || high == null || high - low < 0.5) return null
-    return "${low.roundText()}〜${high.roundText()}°"
+    if (low == null || high == null || !low.isFinite() || !high.isFinite() || low >= high) return null
+    val lowText = low.roundText()
+    val highText = high.roundText()
+    if (lowText == highText) return null
+    return "$lowText〜$highText°"
 }
 
 private fun dailyTemperatureRangeText(day: DailyWeather): String? {
@@ -918,21 +921,34 @@ private fun ForecastTemperatureValue(hour: HourlyWeather) {
             .fillMaxWidth()
             .height(40.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center,
     ) {
-        Text(
-            "${hour.temperatureC?.roundText() ?: "--"}°",
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-        )
-        if (range != null) {
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
             Text(
-                range,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                fontSize = 8.sp,
+                "${hour.temperatureC?.roundText() ?: "--"}°",
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
                 maxLines = 1,
             )
+        }
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(16.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (range != null) {
+                Text(
+                    range,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 8.sp,
+                    maxLines = 1,
+                )
+            }
         }
     }
 }
@@ -1353,7 +1369,7 @@ private fun DisasterSummaryCard(summary: DisasterSummary, onClick: () -> Unit) {
                 Text("重要な気象情報", fontSize = 13.sp, color = Color(0xFFFFB4AB), fontWeight = FontWeight.SemiBold)
             }
             summary.typhoons.forEach { typhoon ->
-                Text("台風第${typhoon.number}号 ${typhoon.category}", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text(typhoon.displayLabel(), fontSize = 20.sp, fontWeight = FontWeight.Bold)
             }
             if (summary.activeWarnings.isNotEmpty()) {
                 Text(
@@ -1388,7 +1404,7 @@ private fun DisasterSummaryCard(summary: DisasterSummary, onClick: () -> Unit) {
 }
 
 fun googleWeatherSearchUrl(summary: DisasterSummary): String {
-    val typhoons = summary.typhoons.joinToString(" ") { "台風${it.number}号 ${it.category}" }
+    val typhoons = summary.typhoons.joinToString(" ") { it.displayLabel() }
     val query = listOf(
         summary.officeName,
         summary.activeWarnings.joinToString(" "),
