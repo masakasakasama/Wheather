@@ -65,6 +65,8 @@ data class WeatherSnapshot(
     val timezone: String = "Asia/Tokyo",
     val airQuality: AirQuality? = null,
     val radarPrecipitation: RadarPrecipitation? = null,
+    val currentTemperatureSource: CurrentTemperatureSource = CurrentTemperatureSource(),
+    val temperatureForecast: TemperatureForecastMetadata = TemperatureForecastMetadata(),
 )
 
 @Serializable
@@ -78,6 +80,7 @@ data class CurrentWeather(
     val windDirectionDeg: Int? = null,
     val pressureHpa: Double? = null,
     val time: String?,
+    val modelTemperatureC: Double? = null,
 )
 
 @Serializable
@@ -99,6 +102,9 @@ data class HourlyWeather(
     val humidityPercent: Int? = null,
     val windSpeedKmh: Double? = null,
     val windDirectionDeg: Int? = null,
+    val temperatureLowC: Double? = null,
+    val temperatureHighC: Double? = null,
+    val temperatureModelCount: Int = 0,
 )
 
 @Serializable
@@ -112,6 +118,11 @@ data class DailyWeather(
     val uvIndexMax: Double? = null,
     val sunrise: String? = null,
     val sunset: String? = null,
+    val maxTemperatureLowC: Double? = null,
+    val maxTemperatureHighC: Double? = null,
+    val minTemperatureLowC: Double? = null,
+    val minTemperatureHighC: Double? = null,
+    val temperatureModelCount: Int = 0,
 )
 
 @Serializable

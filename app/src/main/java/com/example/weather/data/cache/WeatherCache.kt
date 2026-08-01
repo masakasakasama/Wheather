@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.NotificationSettings
+import com.example.weather.data.model.TemperatureAccuracyState
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.canonicalizedSavedLocations
@@ -31,6 +32,7 @@ class WeatherCache(
     private val locationKey = stringPreferencesKey("selected_location")
     private val savedLocationsKey = stringPreferencesKey("saved_locations")
     private val notificationSettingsKey = stringPreferencesKey("notification_settings")
+    private val temperatureAccuracyKey = stringPreferencesKey("temperature_accuracy")
 
     val snapshot: Flow<WeatherSnapshot?> = context.weatherDataStore.data.map { preferences ->
         preferences[snapshotKey]?.let { runCatching { json.decodeFromString<WeatherSnapshot>(it) }.getOrNull() }
@@ -73,9 +75,25 @@ class WeatherCache(
 
     suspend fun readNotificationSettingsOnce(): NotificationSettings = notificationSettings.first()
 
+    suspend fun readTemperatureAccuracyOnce(): TemperatureAccuracyState = context.weatherDataStore.data.map { preferences ->
+        preferences[temperatureAccuracyKey]
+            ?.let { runCatching { json.decodeFromString<TemperatureAccuracyState>(it) }.getOrNull() }
+            ?: TemperatureAccuracyState()
+    }.first()
+
     suspend fun saveSnapshot(snapshot: WeatherSnapshot) {
         context.weatherDataStore.edit { preferences ->
             preferences[snapshotKey] = json.encodeToString(snapshot)
+        }
+    }
+
+    suspend fun saveSnapshotAndTemperatureAccuracy(
+        snapshot: WeatherSnapshot,
+        accuracyState: TemperatureAccuracyState,
+    ) {
+        context.weatherDataStore.edit { preferences ->
+            preferences[snapshotKey] = json.encodeToString(snapshot)
+            preferences[temperatureAccuracyKey] = json.encodeToString(accuracyState)
         }
     }
 

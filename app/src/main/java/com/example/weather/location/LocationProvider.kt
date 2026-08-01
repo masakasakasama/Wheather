@@ -24,6 +24,9 @@ class LocationProvider(private val context: Context) {
     }
 
     private fun LocationManager.getBestLastKnownLocation(): Location? {
+        val fine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
+        val coarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION)
+        if (fine != PackageManager.PERMISSION_GRANTED && coarse != PackageManager.PERMISSION_GRANTED) return null
         return getProviders(true)
             .mapNotNull { provider -> runCatching { getLastKnownLocation(provider) }.getOrNull() }
             .maxByOrNull { it.time }

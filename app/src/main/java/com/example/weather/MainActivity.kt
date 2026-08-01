@@ -32,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -40,6 +41,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.weather.data.model.AppUpdateInfo
@@ -64,6 +68,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -75,6 +81,24 @@ class MainActivity : ComponentActivity() {
             WeatherTheme {
                 val viewModel: WeatherViewModel = viewModel()
                 val state by viewModel.uiState.collectAsState()
+                val lifecycleOwner = LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner, viewModel) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        when (event) {
+                            Lifecycle.Event.ON_START -> viewModel.startForegroundRefresh()
+                            Lifecycle.Event.ON_STOP -> viewModel.stopForegroundRefresh()
+                            else -> Unit
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                        viewModel.startForegroundRefresh()
+                    }
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                        viewModel.stopForegroundRefresh()
+                    }
+                }
                 val permissionLauncher = rememberLauncherForActivityResult(
                     ActivityResultContracts.RequestMultiplePermissions(),
                 ) { permissions ->
@@ -142,6 +166,7 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
     private var locationSearchSequence = 0
     private var weatherRefreshJob: Job? = null
     private var weatherRefreshSequence = 0
+    private var foregroundRefreshJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -197,6 +222,30 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
 
     fun refreshSelected() {
         refresh(uiState.value.selectedLocation)
+    }
+
+    fun startForegroundRefresh() {
+        if (foregroundRefreshJob?.isActive == true) return
+        val snapshot = uiState.value.snapshot
+        if (
+            snapshot != null &&
+            System.currentTimeMillis() - snapshot.updatedAtMillis >= FOREGROUND_REFRESH_INTERVAL_MILLIS &&
+            weatherRefreshJob?.isActive != true
+        ) {
+            refreshSelected()
+        }
+        foregroundRefreshJob = viewModelScope.launch {
+            delay(nextAlignedWeatherRefreshDelay(System.currentTimeMillis()))
+            while (isActive) {
+                if (weatherRefreshJob?.isActive != true) refreshSelected()
+                delay(FOREGROUND_REFRESH_INTERVAL_MILLIS)
+            }
+        }
+    }
+
+    fun stopForegroundRefresh() {
+        foregroundRefreshJob?.cancel()
+        foregroundRefreshJob = null
     }
 
     fun selectLocation(location: WeatherLocation) {
@@ -368,6 +417,20 @@ class WeatherViewModel(application: Application) : AndroidViewModel(application)
             }
     }
 }
+
+internal fun nextAlignedWeatherRefreshDelay(nowMillis: Long): Long {
+    val remainder = Math.floorMod(nowMillis, FOREGROUND_REFRESH_INTERVAL_MILLIS)
+    val candidate = Math.floorMod(FOREGROUND_REFRESH_OFFSET_MILLIS - remainder, FOREGROUND_REFRESH_INTERVAL_MILLIS)
+    return if (candidate < MIN_FOREGROUND_INITIAL_DELAY_MILLIS) {
+        candidate + FOREGROUND_REFRESH_INTERVAL_MILLIS
+    } else {
+        candidate
+    }
+}
+
+private const val FOREGROUND_REFRESH_INTERVAL_MILLIS = 10 * 60 * 1000L
+private const val FOREGROUND_REFRESH_OFFSET_MILLIS = 5 * 60 * 1000L
+private const val MIN_FOREGROUND_INITIAL_DELAY_MILLIS = 60 * 1000L
 
 private fun initialPermissions(): Array<String> {
     val permissions = locationPermissions().toMutableList()

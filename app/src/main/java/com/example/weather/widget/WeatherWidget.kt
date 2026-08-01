@@ -31,10 +31,12 @@ import androidx.glance.unit.ColorProvider
 import com.example.weather.AppServices
 import com.example.weather.MainActivity
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.CurrentTemperatureKind
 import com.example.weather.data.model.effectiveCurrentWeatherCode
 import com.example.weather.data.model.effectiveMaxProbability
 import com.example.weather.data.model.effectivePrecipitationSum
 import com.example.weather.data.model.forecastDays
+import com.example.weather.data.model.hasFreshObservation
 import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
 import com.example.weather.data.model.weatherLabel
@@ -154,7 +156,7 @@ private fun WeatherSquareWidgetContent(selectedLocationName: String, snapshot: W
         if (!compact) {
             Spacer(GlanceModifier.height(3.dp))
             Text(
-                "更新 ${formatHourMinute(snapshot.updatedAtMillis)}",
+                "${temperatureSourceLabel(snapshot)} ・ 更新 ${formatHourMinute(snapshot.updatedAtMillis)}",
                 style = widgetText(9, muted = true),
                 maxLines = 1,
             )
@@ -219,8 +221,8 @@ private fun SmallWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
     val currentWeatherCode = snapshot.effectiveCurrentWeatherCode()
     Column(modifier) {
         Text(
-            "📍 ${snapshot.location.name.substringBefore(" (")}",
-            style = widgetText(10, muted = true),
+            "📍 ${snapshot.location.name.substringBefore(" (")} ・ ${temperatureSourceLabel(snapshot)}",
+            style = widgetText(9, muted = true),
             maxLines = 1,
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -244,7 +246,7 @@ private fun MediumWidget(snapshot: WeatherSnapshot, modifier: GlanceModifier) {
                 maxLines = 1,
             )
             Spacer(GlanceModifier.width(8.dp))
-            Text("更新 ${formatHourMinute(snapshot.updatedAtMillis)}", style = widgetText(9, muted = true))
+            Text("${temperatureSourceLabel(snapshot)} ・ 更新 ${formatHourMinute(snapshot.updatedAtMillis)}", style = widgetText(9, muted = true))
         }
         Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text("${snapshot.current.temperatureC?.roundText() ?: "--"}°", style = widgetText(32, bold = true))
@@ -290,6 +292,17 @@ private fun widgetText(
         fontSize = size.sp,
         fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
     )
+}
+
+private fun temperatureSourceLabel(snapshot: WeatherSnapshot): String {
+    val source = snapshot.currentTemperatureSource
+    return if (source.hasFreshObservation()) {
+        source.dataTimeMillis?.let { "実況 ${formatHourMinute(it)}" } ?: "実況"
+    } else if (source.kind == CurrentTemperatureKind.OBSERVATION) {
+        "前回実況"
+    } else {
+        "推定 ${source.modelCount.coerceAtLeast(1)}モデル"
+    }
 }
 
 private fun formatWidgetDate(date: String): String =

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -34,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.AcUnit
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Cloud
@@ -46,7 +48,6 @@ import androidx.compose.material.icons.outlined.Air
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.MyLocation
-import androidx.compose.material.icons.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.SystemUpdate
@@ -99,6 +100,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.weather.WeatherUiState
 import com.example.weather.data.model.AirQuality
+import com.example.weather.data.model.CurrentTemperatureKind
 import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.ExpectedPrecipitation
@@ -118,6 +120,7 @@ import com.example.weather.data.model.effectiveCurrentWeatherLabel
 import com.example.weather.data.model.forecastDays
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.hasMeasurablePrecipitation
+import com.example.weather.data.model.hasFreshObservation
 import com.example.weather.data.model.intensityLabel
 import com.example.weather.data.model.isRaining
 import com.example.weather.data.model.maxPrecipitationProbabilityFromNow
@@ -215,11 +218,20 @@ fun HomeScreen(
                 )
             }
             item {
-                Text(
-                    snapshot.forecastSource,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        snapshot.forecastSource,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                    )
+                    if (snapshot.temperatureForecast.modelNames.isNotEmpty()) {
+                        Text(
+                            temperatureVerificationText(snapshot),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                        )
+                    }
+                }
             }
         }
     }
@@ -271,6 +283,17 @@ fun HomeScreen(
             radarPrecipitation = snapshot?.freshRadarPrecipitation(),
             onDismiss = { selectedDayDate = null },
         )
+    }
+}
+
+private fun temperatureVerificationText(snapshot: WeatherSnapshot): String {
+    val metadata = snapshot.temperatureForecast
+    return when {
+        metadata.hasAdaptiveWeights ->
+            "気温モデル: 実況との比較${metadata.verificationSampleCount}件を重みに反映"
+        metadata.verificationSampleCount > 0 ->
+            "気温モデル: 実況との比較${metadata.verificationSampleCount}件・重み調整用データを蓄積中"
+        else -> "気温モデル: 実況との比較データを蓄積中"
     }
 }
 
@@ -436,7 +459,11 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
                 CurrentRadarStatusBanner(snapshot)
                 HorizontalDivider(color = WeatherPalette.Outline)
             }
-            Row(Modifier.fillMaxWidth()) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .height(IntrinsicSize.Min),
+            ) {
                 days.forEachIndexed { index, day ->
                     val previousDate = runCatching { LocalDate.parse(day.date).minusDays(1).toString() }.getOrNull()
                     val previousDay = snapshot.daily.firstOrNull { it.date == previousDate }
@@ -452,7 +479,7 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
                         Box(
                             Modifier
                                 .width(1.dp)
-                                .height(248.dp)
+                                .fillMaxHeight()
                                 .background(WeatherPalette.Outline),
                         )
                     }
@@ -528,20 +555,20 @@ private fun DailyForecastColumn(
             fontWeight = FontWeight.Bold,
         )
         WeatherGlyph(code = displayWeatherCode, size = 80.dp)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(displayWeatherLabel, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Icon(
-                    Icons.Outlined.WaterDrop,
-                    contentDescription = null,
-                    modifier = Modifier.size(15.dp),
-                    tint = WeatherPalette.Rain,
-                )
-                Text(probability.percentText(), fontSize = 15.sp)
-            }
+        Text(
+            displayWeatherLabel,
+            fontSize = if (displayWeatherLabel.length >= 7) 15.sp else 18.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+            Icon(
+                Icons.Outlined.WaterDrop,
+                contentDescription = null,
+                modifier = Modifier.size(15.dp),
+                tint = WeatherPalette.Rain,
+            )
+            Text(probability.percentText(), fontSize = 15.sp, maxLines = 1)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.Bottom) {
             TemperatureWithPreviousDay(
@@ -553,6 +580,14 @@ private fun DailyForecastColumn(
                 temperature = day.minTemperatureC,
                 previousTemperature = previousDay?.minTemperatureC,
                 color = WeatherPalette.LowTemperature,
+            )
+        }
+        dailyTemperatureRangeText(day)?.let { range ->
+            Text(
+                range,
+                fontSize = 10.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
             )
         }
         if (isObservedRain) {
@@ -594,6 +629,21 @@ fun temperatureDifferenceText(current: Double?, previous: Double?): String? {
     if (current == null || previous == null) return null
     val difference = current.roundToInt() - previous.roundToInt()
     return "[${if (difference > 0) "+" else ""}$difference]"
+}
+
+fun temperatureRangeText(low: Double?, high: Double?): String? {
+    if (low == null || high == null || high - low < 0.5) return null
+    return "${low.roundText()}〜${high.roundText()}°"
+}
+
+private fun dailyTemperatureRangeText(day: DailyWeather): String? {
+    val highRange = temperatureRangeText(day.maxTemperatureLowC, day.maxTemperatureHighC)
+    val lowRange = temperatureRangeText(day.minTemperatureLowC, day.minTemperatureHighC)
+    val parts = buildList {
+        highRange?.let { add("最高 $it") }
+        lowRange?.let { add("最低 $it") }
+    }
+    return parts.takeIf { it.isNotEmpty() }?.joinToString(" / ")?.let { "予報幅 $it" }
 }
 
 @Composable
@@ -669,7 +719,7 @@ fun HourlyForecastTable(
             Column(Modifier.width(48.dp)) {
                 ForecastTableLabel("日時", 42)
                 ForecastTableLabel("", 48)
-                ForecastTableLabel("気温", 30)
+                ForecastTableLabel("気温", 40)
                 ForecastTableLabel("降水", 30)
                 ForecastTableLabel("雨量", 30)
                 ForecastTableLabel("湿度", 30)
@@ -698,7 +748,7 @@ fun HourlyForecastTable(
                                 size = 36.dp,
                             )
                         }
-                        ForecastTableValue("${hour.temperatureC?.roundText() ?: "--"}°", 30, 14, true)
+                        ForecastTemperatureValue(hour)
                         ForecastTableValue(
                             if (isObservedRain) "観測" else hour.precipitationProbability.percentText(),
                             30,
@@ -861,6 +911,33 @@ private fun ForecastTableValue(
 }
 
 @Composable
+private fun ForecastTemperatureValue(hour: HourlyWeather) {
+    val range = temperatureRangeText(hour.temperatureLowC, hour.temperatureHighC)
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .height(40.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            "${hour.temperatureC?.roundText() ?: "--"}°",
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+        if (range != null) {
+            Text(
+                range,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 8.sp,
+                maxLines = 1,
+            )
+        }
+    }
+}
+
+@Composable
 private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
     val today = snapshot.today()
     val currentWeatherCode = snapshot.effectiveCurrentWeatherCode()
@@ -883,6 +960,7 @@ private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
                 }
                 WeatherGlyph(code = currentWeatherCode, size = 48.dp)
             }
+            CurrentTemperatureSourceRow(snapshot)
             Row(
                 Modifier
                     .fillMaxWidth()
@@ -908,7 +986,16 @@ private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
                 )
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                CurrentMetric("気温", snapshot.current.temperatureC.temperatureText(), Modifier.weight(1f), 29)
+                CurrentMetric(
+                    when {
+                        snapshot.currentTemperatureSource.hasFreshObservation() -> "実況気温"
+                        snapshot.currentTemperatureSource.kind == CurrentTemperatureKind.OBSERVATION -> "前回気温"
+                        else -> "推定気温"
+                    },
+                    snapshot.current.temperatureC.temperatureText(),
+                    Modifier.weight(1f),
+                    29,
+                )
                 CurrentMetric("気圧", snapshot.current.pressureHpa.pressureText(), Modifier.weight(1f), 22)
                 CurrentMetric("湿度", snapshot.current.humidityPercent.percentText(), Modifier.weight(1f), 22)
             }
@@ -921,10 +1008,64 @@ private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
             }
             RadarPreview(
                 location = snapshot.location,
+                refreshKey = snapshot.updatedAtMillis,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(170.dp)
                     .clip(RoundedCornerShape(5.dp)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun CurrentTemperatureSourceRow(snapshot: WeatherSnapshot) {
+    val source = snapshot.currentTemperatureSource
+    val isFreshObservation = source.hasFreshObservation()
+    val isStoredObservation = source.kind == CurrentTemperatureKind.OBSERVATION
+    val detail = if (isStoredObservation) {
+        buildList {
+            source.stationName?.let(::add)
+            source.dataTimeMillis?.let { add("${formatHourMinute(it)}観測") }
+            source.distanceKm?.let { add("約${it.oneDecimal()}km") }
+        }.joinToString(" ・ ")
+    } else {
+        buildList {
+            add(source.provider)
+            temperatureRangeText(source.rangeLowC, source.rangeHighC)?.let { add("予報幅 $it") }
+        }.joinToString(" ・ ")
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(5.dp))
+            .background(if (isFreshObservation) Color(0xFF123247) else WeatherPalette.SurfaceVariant)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Box(
+            Modifier
+                .size(7.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(if (isFreshObservation) WeatherPalette.Rain else WeatherPalette.Tertiary),
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+            Text(
+                when {
+                    isFreshObservation -> "実況値"
+                    isStoredObservation -> "前回の実況値（20分超）"
+                    else -> "予報モデルによる推定値"
+                },
+                color = if (isFreshObservation) WeatherPalette.Rain else WeatherPalette.Tertiary,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                detail.ifBlank { "取得元を確認できません" },
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontSize = 10.sp,
+                maxLines = 2,
             )
         }
     }
@@ -1236,7 +1377,7 @@ private fun DisasterSummaryCard(summary: DisasterSummary, onClick: () -> Unit) {
                     fontSize = 11.sp,
                 )
                 Icon(
-                    Icons.Outlined.OpenInNew,
+                    Icons.AutoMirrored.Outlined.OpenInNew,
                     contentDescription = "Google検索を開く",
                     tint = Color(0xFFFFDAD6),
                     modifier = Modifier.size(17.dp),

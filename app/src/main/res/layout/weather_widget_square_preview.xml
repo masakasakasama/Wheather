@@ -49,5 +49,5 @@
         android:gravity="center"
         android:text="更新 10:14"
         android:textColor="#B8B8B8"
-        android:textSize="9sp" />
+        android:textSize="11sp" />
 </LinearLayout>

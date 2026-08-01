@@ -3,6 +3,7 @@ package com.example.weather.data.repository
 import android.content.Context
 import androidx.glance.appwidget.updateAll
 import com.example.weather.data.api.AirQualityClient
+import com.example.weather.data.api.JmaAmedasClient
 import com.example.weather.data.api.JmaRadarClient
 import com.example.weather.data.api.OpenMeteoClient
 import com.example.weather.data.cache.WeatherCache
@@ -16,6 +17,8 @@ import com.example.weather.data.model.sameForecastPlaceAs
 import com.example.weather.widget.WeatherWidget
 import com.example.weather.widget.WeatherSquareWidget
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -23,10 +26,13 @@ class WeatherRepository(
     private val context: Context,
     private val openMeteoClient: OpenMeteoClient,
     private val airQualityClient: AirQualityClient,
+    private val amedasClient: JmaAmedasClient,
     private val radarClient: JmaRadarClient,
     private val cache: WeatherCache,
+    private val temperatureConsensusEngine: TemperatureConsensusEngine = TemperatureConsensusEngine(),
 ) {
     private val savedLocationsMutex = Mutex()
+    private val refreshMutex = Mutex()
 
     val weather: Flow<WeatherSnapshot?> = cache.snapshot
     val selectedLocation: Flow<WeatherLocation> = cache.selectedLocation
@@ -39,20 +45,42 @@ class WeatherRepository(
 
     suspend fun refresh(): Result<WeatherSnapshot> = refresh(cache.readLocationOnce())
 
-    suspend fun refresh(location: WeatherLocation): Result<WeatherSnapshot> {
-        return runCatching {
-            val forecast = openMeteoClient.fetchForecast(location)
-            val snapshot = forecast.copy(
-                airQuality = airQualityClient.fetchAirQuality(location),
-                radarPrecipitation = runCatching {
-                    radarClient.latestPrecipitation(location)
-                }.getOrNull(),
-            )
+    suspend fun refresh(location: WeatherLocation): Result<WeatherSnapshot> = refreshMutex.withLock {
+        runCatching {
+            val result = coroutineScope {
+                val forecast = async { openMeteoClient.fetchForecast(location) }
+                val temperatureModels = async {
+                    runCatching { openMeteoClient.fetchTemperatureModels(location) }.getOrNull()
+                }
+                val observation = async {
+                    runCatching { amedasClient.latestTemperature(location) }.getOrNull()
+                }
+                val airQuality = async {
+                    runCatching { airQualityClient.fetchAirQuality(location) }.getOrNull()
+                }
+                val radar = async {
+                    runCatching { radarClient.latestPrecipitation(location) }.getOrNull()
+                }
+                val accuracy = async { cache.readTemperatureAccuracyOnce() }
+                val consensus = temperatureConsensusEngine.apply(
+                    base = forecast.await(),
+                    modelForecast = temperatureModels.await(),
+                    observation = observation.await(),
+                    previousAccuracyState = accuracy.await(),
+                )
+                consensus.copy(
+                    snapshot = consensus.snapshot.copy(
+                        airQuality = airQuality.await(),
+                        radarPrecipitation = radar.await(),
+                    ),
+                )
+            }
+            val snapshot = result.snapshot
             val selectedLocation = cache.readLocationOnce()
             check(location.sameForecastPlaceAs(selectedLocation)) {
                 "Selected location changed while weather was loading"
             }
-            cache.saveSnapshot(snapshot)
+            cache.saveSnapshotAndTemperatureAccuracy(snapshot, result.accuracyState)
             updateWidgets()
             snapshot
         }

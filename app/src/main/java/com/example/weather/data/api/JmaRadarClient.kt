@@ -7,6 +7,7 @@ import com.example.weather.data.model.RadarPrecipitation
 import com.example.weather.data.model.RadarTargetTime
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.radarIntensityLowerBound
+import com.example.weather.data.model.toRadarEpochMillis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
@@ -14,9 +15,6 @@ import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
-import java.time.LocalDateTime
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 import kotlin.math.PI
 import kotlin.math.asinh
 import kotlin.math.floor
@@ -98,17 +96,7 @@ class JmaRadarClient(
         if (!recognizedPixel) throw IOException("JMA radar tile color was not recognized")
         RadarPrecipitation(
             intensityLowerBoundMmPerHour = strongestIntensity,
-            observedAtMillis = frame.validTime.toEpochMillis(),
+            observedAtMillis = frame.validTime.toRadarEpochMillis(),
         )
-    }
-
-    private fun String.toEpochMillis(): Long {
-        return LocalDateTime.parse(this, RadarTimeFormatter)
-            .toInstant(ZoneOffset.UTC)
-            .toEpochMilli()
-    }
-
-    private companion object {
-        val RadarTimeFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
     }
 }

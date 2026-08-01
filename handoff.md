@@ -15,6 +15,18 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 
 ## これまでの作業内容
 
+- 2026-08-01 現在気温と気温予報の取得・評価経路を全面リファクタリング。
+  - 現在気温は予報モデル値ではなく、気象庁アメダスの最新観測を優先。30km以内、品質正常、観測後20分以内の最寄り観測所だけを実況として採用。
+  - 実況の観測所名、観測時刻、距離をホームへ表示。20分超は`前回実況`、海外・取得失敗時は`モデル推定`と明示。
+  - 気温予報はJMA Seamless、ECMWF IFS 0.25°、GFS Seamlessを別取得し、外れ値除外と誤差重み付き統合を実装。天気コード・降水などはOpen-Meteo Best Matchを維持。
+  - アメダス実況との差による直近18時間の減衰補正を追加。各モデルの予報と後日の実況を端末内DataStoreで比較し、地点・リード時間別のMAEとバイアスを3標本以上から重みへ反映。
+  - 統合済み時間別気温から日次最高・最低を再集計し、ホーム、時間表、2週間、ウィジェットの気温経路を同じキャッシュへ統一。モデル間の予報幅も表示。
+  - アプリ表示中は10分ごとに再取得し、バックグラウンドへ移ると停止。起動時、手動更新、30分WorkManager更新は維持。
+  - 2×2を含む全ウィジェットへ実況時刻、前回実況、または推定モデル数を表示。
+  - 気象庁レーダーの`validtime`をUTCとして共通解析し、日本時間表示と鮮度計算の基準を統一。ホームのレーダープレビューもスナップショット更新に追従。
+  - 東京の実APIでアメダス観測、JMA/ECMWF/GFS、レーダー時刻を確認。ドイツ地点でも現地タイムゾーンと複数モデル取得を確認。
+  - 41件の単体テスト、Android Lintエラー0、APKビルド、エミュレータへのアンインストールなし上書きインストール、画面表示、レーダー日本時刻を確認。
+  - Pixelランチャーへ専用2×2ウィジェットを実際に追加し、今日/明日、天気、最高最低、降水確率、実況時刻、更新時刻が切れずに収まることを確認。
 - 2026-07-30 豪雨中に晴れ表示となる現在天気の経路を修正。
   - 台東区座標の気象庁最新タイルを直接検査し、`80mm/h以上`の配色が取得できる一方、表示中の`CurrentConditionsPanel`と時間表がOpen-Meteoの天気コードを直接使っていたことを確認。
   - 最新レーダー降雨を優先する現在天気コード・ラベルをデータ層へ一本化。ホーム上部、いまの天気、現在時刻の時間表、時間タブ、日別詳細、ウィジェットで共通利用。
@@ -247,16 +259,20 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 ### data
 
 - `app/src/main/java/com/example/weather/data/api/OpenMeteoClient.kt`
+- `app/src/main/java/com/example/weather/data/api/JmaAmedasClient.kt`
 - `app/src/main/java/com/example/weather/data/api/AirQualityClient.kt`
 - `app/src/main/java/com/example/weather/data/api/AppUpdateClient.kt`
 - `app/src/main/java/com/example/weather/data/api/JmaRadarClient.kt`
 - `app/src/main/java/com/example/weather/data/api/JmaDisasterClient.kt`
 - `app/src/main/java/com/example/weather/data/cache/WeatherCache.kt`
 - `app/src/main/java/com/example/weather/data/model/WeatherModels.kt`
+- `app/src/main/java/com/example/weather/data/model/TemperatureModels.kt`
+- `app/src/main/java/com/example/weather/data/model/RadarTime.kt`
 - `app/src/main/java/com/example/weather/data/model/PrecipitationRules.kt`
 - `app/src/main/java/com/example/weather/data/model/AppUpdateModels.kt`
 - `app/src/main/java/com/example/weather/data/model/DisasterModels.kt`
 - `app/src/main/java/com/example/weather/data/repository/WeatherRepository.kt`
+- `app/src/main/java/com/example/weather/data/repository/TemperatureConsensusEngine.kt`
 
 ### location / worker / widget
 
@@ -273,6 +289,11 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 - `app/src/main/java/com/example/weather/ui/HourlyScreen.kt`
 - `app/src/main/java/com/example/weather/ui/WeeklyScreen.kt`
 - `app/src/test/java/com/example/weather/data/model/PrecipitationRulesTest.kt`
+- `app/src/test/java/com/example/weather/ForegroundRefreshTimingTest.kt`
+- `app/src/test/java/com/example/weather/data/api/JmaAmedasClientTest.kt`
+- `app/src/test/java/com/example/weather/data/model/CurrentTemperatureSourceTest.kt`
+- `app/src/test/java/com/example/weather/data/model/RadarTimeTest.kt`
+- `app/src/test/java/com/example/weather/data/repository/TemperatureConsensusEngineTest.kt`
 
 ### ドキュメント
 
@@ -281,8 +302,9 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 
 ## 未解決課題
 
-- ローカル環境にJava / Gradle / Android SDKがない場合、ローカルビルド確認は不可。GitHub Actionsで確認する。
-- 実機での表示確認は未実施。
+- Pixel API 34エミュレータでは上書きインストール、表示、通信を確認済み。今回のAPKは物理Galaxyでの最終確認が必要。
+- 端末内のモデル誤差重みは初回時点では未学習。選択地点で1時間以上前に保存した予報と後日のアメダス実況が各モデル3標本以上たまってから適用される。
+- 現在気温は秒単位のライブ値ではない。アメダス発表とアプリ再取得は約10分間隔で、20分超の観測は実況扱いしない。
 - 雨雲レーダーはMVP。
   - 気象庁タイル仕様変更に弱い。
   - パン/ズームはボタン式で最低限。ピンチズーム、慣性スクロール、スムーズな地図操作は未実装。
@@ -290,7 +312,6 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 - 重要気象情報はMVP。
   - 警報・注意報の地点判定は府県予報区レベルの近似。
   - 台風は一覧表示のみで、進路図・暴風域確率・詳細諸元は未実装。
-- 天気アイコンは文字ベース。統一感のあるベクターアイコンは未実装。
 - Widgetのサイズ別レイアウトはMVP。実機ホーム画面での詰め調整が必要。
 - 通知はAndroid 13以降でユーザーが通知許可を拒否すると動作しない。
 - 空気質はOpen-Meteo経由のCAMS系モデル値。観測局の実測値そのものではない。

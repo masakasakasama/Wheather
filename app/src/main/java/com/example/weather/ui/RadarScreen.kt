@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.example.weather.AppServices
 import com.example.weather.data.model.RadarFrame
 import com.example.weather.data.model.WeatherLocation
+import com.example.weather.data.model.toRadarDisplayTime
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -87,7 +88,7 @@ fun RadarScreen(location: WeatherLocation) {
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text("最新 ${radar.frame.validTime.toDisplayRadarTime()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("最新 ${radar.frame.validTime.toRadarDisplayTime()}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Z${radar.zoom} ${radar.centerLabel}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 RadarControls(
@@ -111,10 +112,15 @@ fun RadarScreen(location: WeatherLocation) {
 }
 
 @Composable
-fun RadarPreview(location: WeatherLocation, modifier: Modifier = Modifier) {
+fun RadarPreview(
+    location: WeatherLocation,
+    refreshKey: Long,
+    modifier: Modifier = Modifier,
+) {
     var state by remember(location) { mutableStateOf<RadarUiState>(RadarUiState.Loading) }
 
-    LaunchedEffect(location.latitude, location.longitude) {
+    LaunchedEffect(location.latitude, location.longitude, refreshKey) {
+        state = RadarUiState.Loading
         state = runCatching { loadRadar(location, DEFAULT_RADAR_ZOOM, 0, 0) }
             .getOrElse { RadarUiState.Error("雨雲レーダーを取得できません") }
     }
@@ -130,7 +136,7 @@ fun RadarPreview(location: WeatherLocation, modifier: Modifier = Modifier) {
             is RadarUiState.Ready -> {
                 RadarTileGrid(radar, Modifier.fillMaxSize())
                 Text(
-                    "雨雲レーダー ${radar.frame.validTime.toDisplayRadarTime()}",
+                    "雨雲レーダー ${radar.frame.validTime.toRadarDisplayTime()}",
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .background(Color.Black.copy(alpha = 0.7f))
@@ -302,10 +308,6 @@ private fun centerLabel(offsetX: Int, offsetY: Int): String {
 }
 
 private fun Int.floorMod(divisor: Int): Int = ((this % divisor) + divisor) % divisor
-
-private fun String.toDisplayRadarTime(): String {
-    return if (length >= 12) "${substring(4, 6)}/${substring(6, 8)} ${substring(8, 10)}:${substring(10, 12)}" else this
-}
 
 private const val MIN_RADAR_ZOOM = 6
 private const val DEFAULT_RADAR_ZOOM = 8

@@ -5,6 +5,9 @@ import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.GeocodingResponse
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.MinutelyWeather
+import com.example.weather.data.model.ModelTemperaturePoint
+import com.example.weather.data.model.ModelTemperatureSeries
+import com.example.weather.data.model.MultiModelTemperatureForecast
 import com.example.weather.data.model.OpenMeteoResponse
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
@@ -13,6 +16,10 @@ import com.example.weather.data.model.toWeatherLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -60,6 +67,41 @@ class OpenMeteoClient(
                 .distinctBy { it.identityKey() }
         }
     }
+
+    suspend fun fetchTemperatureModels(location: WeatherLocation): MultiModelTemperatureForecast =
+        withContext(Dispatchers.IO) {
+            val url = "https://api.open-meteo.com/v1/forecast".toHttpUrl().newBuilder()
+                .addQueryParameter("latitude", location.latitude.toString())
+                .addQueryParameter("longitude", location.longitude.toString())
+                .addQueryParameter("hourly", "temperature_2m")
+                .addQueryParameter("models", TEMPERATURE_MODELS.joinToString(",") { it.apiId })
+                .addQueryParameter("forecast_days", "14")
+                .addQueryParameter("past_days", "1")
+                .addQueryParameter("timezone", "auto")
+                .build()
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", "PersonalWeather/1.0")
+                .build()
+
+            var failure: Exception? = null
+            repeat(2) {
+                try {
+                    httpClient.newCall(request).execute().use { response ->
+                        if (!response.isSuccessful) {
+                            failure = IOException("Open-Meteo multi-model request failed: HTTP ${response.code}")
+                        } else {
+                            val body = response.body?.string()
+                                ?: throw IOException("Open-Meteo multi-model response was empty")
+                            return@withContext parseTemperatureModels(body)
+                        }
+                    }
+                } catch (error: Exception) {
+                    failure = error
+                }
+            }
+            throw failure ?: IOException("Open-Meteo multi-model request failed")
+        }
 
     private fun request(location: WeatherLocation, useJmaModel: Boolean): WeatherSnapshot? {
         val builder = "https://api.open-meteo.com/v1/forecast".toHttpUrl().newBuilder()
@@ -142,12 +184,47 @@ class OpenMeteoClient(
                 windDirectionDeg = current?.windDirection,
                 pressureHpa = current?.pressure,
                 time = current?.time,
+                modelTemperatureC = current?.temperature,
             ),
             minutely15 = minutelyItems,
             hourly = hourlyItems,
             daily = dailyItems,
             updatedAtMillis = System.currentTimeMillis(),
             timezone = timezone ?: "Asia/Tokyo",
+        )
+    }
+
+    private fun parseTemperatureModels(body: String): MultiModelTemperatureForecast {
+        val hourly = json.parseToJsonElement(body).jsonObject["hourly"]?.jsonObject
+            ?: throw IOException("Open-Meteo multi-model hourly data was missing")
+        val times = hourly["time"]?.jsonArray?.map { it.jsonPrimitive.content }
+            ?: throw IOException("Open-Meteo multi-model times were missing")
+        val models = TEMPERATURE_MODELS.mapNotNull { model ->
+            val values = hourly["temperature_2m_${model.apiId}"]
+                ?.jsonArray
+                ?.map { element -> element.jsonPrimitive.doubleOrNull }
+                ?: return@mapNotNull null
+            val points = times.mapIndexed { index, time ->
+                ModelTemperaturePoint(time = time, temperatureC = values.getOrNull(index))
+            }
+            points.takeIf { items -> items.any { it.temperatureC != null } }?.let {
+                ModelTemperatureSeries(model.apiId, model.displayName, it)
+            }
+        }
+        if (models.isEmpty()) throw IOException("Open-Meteo returned no temperature models")
+        return MultiModelTemperatureForecast(models, System.currentTimeMillis())
+    }
+
+    private data class TemperatureModelDefinition(
+        val apiId: String,
+        val displayName: String,
+    )
+
+    private companion object {
+        val TEMPERATURE_MODELS = listOf(
+            TemperatureModelDefinition("jma_seamless", "JMA"),
+            TemperatureModelDefinition("ecmwf_ifs025", "ECMWF"),
+            TemperatureModelDefinition("gfs_seamless", "GFS"),
         )
     }
 }
