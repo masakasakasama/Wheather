@@ -68,7 +68,7 @@ fun WeatherSnapshot.radarObservationStatus(
             "レーダー観測 ${radar.intensityLabel()} ${radar.intensityLowerBoundMmPerHour.toCompactRadarNumber()}mm/h以上"
         radar != null -> "レーダー観測 降雨なし"
         radarPrecipitation != null -> "レーダー観測が古いため予報値を表示"
-        location.latitude in 20.0..48.0 && location.longitude in 118.0..150.0 ->
+        location.isInJapan() ->
             "レーダー取得失敗・予報値を表示"
         else -> "レーダー対象外・予報値を表示"
     }

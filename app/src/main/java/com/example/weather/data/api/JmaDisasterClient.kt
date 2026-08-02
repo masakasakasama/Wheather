@@ -3,6 +3,8 @@ package com.example.weather.data.api
 import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.TyphoonSummary
 import com.example.weather.data.model.WeatherLocation
+import com.example.weather.data.model.forecastAreaKey
+import com.example.weather.data.model.isInJapan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -27,10 +29,21 @@ class JmaDisasterClient(
 ) {
     suspend fun fetchSummary(location: WeatherLocation): Result<DisasterSummary> = runCatching {
         withContext(Dispatchers.IO) {
+            if (!location.isInJapan()) {
+                return@withContext DisasterSummary(
+                    locationKey = location.forecastAreaKey(),
+                    officeName = null,
+                    warningHeadline = null,
+                    activeWarnings = emptyList(),
+                    typhoons = emptyList(),
+                    updatedAtMillis = System.currentTimeMillis(),
+                )
+            }
             val office = nearestOffice(location)
             val warnings = fetchWarningSummary(office, location)
             val typhoons = fetchTyphoons()
             DisasterSummary(
+                locationKey = location.forecastAreaKey(),
                 officeName = warnings.areaName ?: office.name,
                 warningHeadline = warnings.headline,
                 activeWarnings = warnings.activeWarnings,

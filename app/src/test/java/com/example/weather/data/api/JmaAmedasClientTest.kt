@@ -3,6 +3,7 @@ package com.example.weather.data.api
 import com.example.weather.data.model.AmedasObservationValue
 import com.example.weather.data.model.AmedasStation
 import com.example.weather.data.model.WeatherLocation
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
 import kotlin.test.Test
@@ -10,7 +11,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
 class JmaAmedasClientTest {
-    private val client = JmaAmedasClient(OkHttpClient(), Json { ignoreUnknownKeys = true })
+    private val client = JmaAmedasClient(noNetworkHttpClient(), Json { ignoreUnknownKeys = true })
 
     @Test
     fun selectsNearestNormalQualityTemperatureStation() {
@@ -56,10 +57,23 @@ class JmaAmedasClientTest {
         assertNull(result)
     }
 
+    @Test
+    fun overseasLocationDoesNotRequestJmaObservations() = runBlocking {
+        val result = client.latestTemperature(
+            WeatherLocation("釜山", 35.1796, 129.0756, countryCode = "KR"),
+        )
+
+        assertNull(result)
+    }
+
     private fun station(name: String, latDegree: Int, latMinute: Double, lonDegree: Int, lonMinute: Double) =
         AmedasStation(
             lat = listOf(latDegree.toDouble(), latMinute),
             lon = listOf(lonDegree.toDouble(), lonMinute),
             name = name,
         )
+
+    private fun noNetworkHttpClient(): OkHttpClient = OkHttpClient.Builder()
+        .addInterceptor { throw AssertionError("Overseas location must not call JMA AMeDAS") }
+        .build()
 }

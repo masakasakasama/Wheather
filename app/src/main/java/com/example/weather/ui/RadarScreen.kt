@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import com.example.weather.AppServices
 import com.example.weather.data.model.RadarFrame
 import com.example.weather.data.model.WeatherLocation
+import com.example.weather.data.model.isInJapan
 import com.example.weather.data.model.toRadarDisplayTime
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -50,6 +51,22 @@ import kotlin.math.tan
 
 @Composable
 fun RadarScreen(location: WeatherLocation) {
+    if (!location.isInJapan()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .padding(22.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text("雨雲レーダー", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+            Text(location.name, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                "気象庁の雨雲レーダーは日本国内の地点のみ対応しています",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        return
+    }
     var refreshKey by remember { mutableIntStateOf(0) }
     var zoom by remember(location) { mutableIntStateOf(8) }
     var tileOffsetX by remember(location) { mutableIntStateOf(0) }
@@ -117,6 +134,7 @@ fun RadarPreview(
     refreshKey: Long,
     modifier: Modifier = Modifier,
 ) {
+    if (!location.isInJapan()) return
     var state by remember(location) { mutableStateOf<RadarUiState>(RadarUiState.Loading) }
 
     LaunchedEffect(location.latitude, location.longitude, refreshKey) {

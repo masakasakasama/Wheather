@@ -1,6 +1,7 @@
 package com.example.weather.data.model
 
 data class DisasterSummary(
+    val locationKey: String,
     val officeName: String?,
     val warningHeadline: String?,
     val activeWarnings: List<String>,
@@ -10,6 +11,9 @@ data class DisasterSummary(
     val hasImportantInfo: Boolean
         get() = activeWarnings.isNotEmpty() || typhoons.isNotEmpty() || !warningHeadline.isNullOrBlank()
 }
+
+fun DisasterSummary.appliesTo(location: WeatherLocation): Boolean =
+    location.isInJapan() && locationKey == location.forecastAreaKey()
 
 data class TyphoonSummary(
     val number: String?,

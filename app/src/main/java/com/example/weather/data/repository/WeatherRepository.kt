@@ -13,6 +13,7 @@ import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.canonicalizedSavedLocations
 import com.example.weather.data.model.identityKey
 import com.example.weather.data.model.isDeviceLocation
+import com.example.weather.data.model.isInJapan
 import com.example.weather.data.model.sameForecastPlaceAs
 import com.example.weather.widget.WeatherWidget
 import com.example.weather.widget.WeatherSquareWidget
@@ -48,18 +49,27 @@ class WeatherRepository(
     suspend fun refresh(location: WeatherLocation): Result<WeatherSnapshot> = refreshMutex.withLock {
         runCatching {
             val result = coroutineScope {
+                val useJmaServices = location.isInJapan()
                 val forecast = async { openMeteoClient.fetchForecast(location) }
                 val temperatureModels = async {
                     runCatching { openMeteoClient.fetchTemperatureModels(location) }.getOrNull()
                 }
                 val observation = async {
-                    runCatching { amedasClient.latestTemperature(location) }.getOrNull()
+                    if (useJmaServices) {
+                        runCatching { amedasClient.latestTemperature(location) }.getOrNull()
+                    } else {
+                        null
+                    }
                 }
                 val airQuality = async {
                     runCatching { airQualityClient.fetchAirQuality(location) }.getOrNull()
                 }
                 val radar = async {
-                    runCatching { radarClient.latestPrecipitation(location) }.getOrNull()
+                    if (useJmaServices) {
+                        runCatching { radarClient.latestPrecipitation(location) }.getOrNull()
+                    } else {
+                        null
+                    }
                 }
                 val accuracy = async { cache.readTemperatureAccuracyOnce() }
                 val consensus = temperatureConsensusEngine.apply(

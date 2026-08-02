@@ -4,6 +4,7 @@ import com.example.weather.data.model.AmedasObservationValue
 import com.example.weather.data.model.AmedasStation
 import com.example.weather.data.model.TemperatureObservation
 import com.example.weather.data.model.WeatherLocation
+import com.example.weather.data.model.isInJapan
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -32,7 +33,7 @@ class JmaAmedasClient(
     private var stationCache: Map<String, AmedasStation>? = null
 
     suspend fun latestTemperature(location: WeatherLocation): TemperatureObservation? = withContext(Dispatchers.IO) {
-        if (!location.isInAmedasCoverage()) return@withContext null
+        if (!location.isInJapan()) return@withContext null
 
         val latestText = getText(LATEST_TIME_URL).trim()
         val observedAt = runCatching { OffsetDateTime.parse(latestText) }.getOrNull() ?: return@withContext null
@@ -110,9 +111,6 @@ class JmaAmedasClient(
         private val MAP_TIME_FORMAT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss")
     }
 }
-
-private fun WeatherLocation.isInAmedasCoverage(): Boolean =
-    latitude in 20.0..46.5 && longitude in 122.0..154.0
 
 private fun List<Double>.toCoordinate(): Double? {
     val degrees = getOrNull(0) ?: return null

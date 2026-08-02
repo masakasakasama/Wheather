@@ -15,6 +15,11 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 
 ## これまでの作業内容
 
+- 2026-08-03 海外地点へ日本の重要気象情報が表示される問題を修正。
+  - 原因は、地点の国を判定せず最寄りの気象庁管区を選び、全国の台風一覧も無条件取得していたこと。シドニーでは沖縄の注意報と日本周辺の台風が混在していた。
+  - Open-Meteo Geocoding APIの`country_code`を地点へ保存し、気象庁の警報・台風、アメダス実況、雨雲レーダーの取得を日本の地点だけに制限。旧保存データとGPS現在地は日本列島の座標範囲で互換判定する。
+  - 重要気象情報へ取得地点キーを持たせ、地点変更中に前地点の警報が一時表示される競合を遮断。海外のホームでは気象庁レーダー状態とプレビューを非表示にし、雨雲タブでは日本国内限定と明示する。
+  - シドニー、釜山、日本の離島、国コード引継ぎ、地点不一致、JMA各クライアントの海外通信抑止を回帰テストへ追加。Pixel API 34でシドニー検索後に日本の警報が表示されないことと、海外用雨雲画面を確認。
 - 2026-08-02 前日比、時間別気温幅、台風・熱帯低気圧の表示を修正。
   - 今日・明日のカードから冗長な`最高・最低とも前日比`を削除。前日比の`[+2]`、`[0]`、`[-1]`は各気温の横だけに表示。
   - 時間表の主気温とモデル予報幅を固定高の別行にし、予報幅の有無にかかわらず全列の高さと基準位置を統一。
@@ -298,8 +303,12 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
 - `app/src/test/java/com/example/weather/data/model/PrecipitationRulesTest.kt`
 - `app/src/test/java/com/example/weather/ForegroundRefreshTimingTest.kt`
 - `app/src/test/java/com/example/weather/data/api/JmaAmedasClientTest.kt`
+- `app/src/test/java/com/example/weather/data/api/JmaDisasterClientTest.kt`
+- `app/src/test/java/com/example/weather/data/api/JmaRadarClientTest.kt`
 - `app/src/test/java/com/example/weather/data/model/CurrentTemperatureSourceTest.kt`
+- `app/src/test/java/com/example/weather/data/model/RadarPrecipitationRulesTest.kt`
 - `app/src/test/java/com/example/weather/data/model/RadarTimeTest.kt`
+- `app/src/test/java/com/example/weather/data/model/WeatherLocationTest.kt`
 - `app/src/test/java/com/example/weather/data/repository/TemperatureConsensusEngineTest.kt`
 
 ### ドキュメント
@@ -318,7 +327,7 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
   - 地図タイル利用ポリシーは公開配布前に再確認が必要。
 - 重要気象情報はMVP。
   - 警報・注意報の地点判定は府県予報区レベルの近似。
-  - 台風は一覧表示のみで、進路図・暴風域確率・詳細諸元は未実装。
+  - 日本の地点だけが対象。台風は一覧表示のみで、海外のサイクロン、進路図、暴風域確率、詳細諸元は未実装。
 - Widgetのサイズ別レイアウトはMVP。実機ホーム画面での詰め調整が必要。
 - 通知はAndroid 13以降でユーザーが通知許可を拒否すると動作しない。
 - 空気質はOpen-Meteo経由のCAMS系モデル値。観測局の実測値そのものではない。
@@ -340,6 +349,7 @@ GitHub Actionsでdebug APKをビルドし、`latest-debug` Releaseへ上書き�
    - 今日の判断カードの傘・洗濯・服装・外出注意が、降水確率・雨量・湿度・UV・AQIに応じて自然に変わること。
    - 時間画面のグラフとカードの時刻が横スクロール位置で一致すること。
    - 地点検索、保存、並べ替え、削除。
+   - 海外地点で日本の警報・台風・アメダス・雨雲レーダーが混在しないこと。
    - 起動時アップデート確認。
    - 更新ダイアログからAPKインストール画面が開くこと。
    - 週間カード詳細。

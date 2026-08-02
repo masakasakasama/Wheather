@@ -9,11 +9,29 @@ data class WeatherLocation(
     val name: String,
     val latitude: Double,
     val longitude: Double,
+    val countryCode: String? = null,
 )
 
 private const val DeviceLocationName = "現在地"
 
 fun WeatherLocation.isDeviceLocation(): Boolean = name == DeviceLocationName
+
+fun WeatherLocation.isInJapan(): Boolean {
+    countryCode?.trim()?.takeIf { it.isNotEmpty() }?.let {
+        return it.equals("JP", ignoreCase = true)
+    }
+    return isWithinJapanCoordinateFallback()
+}
+
+private fun WeatherLocation.isWithinJapanCoordinateFallback(): Boolean =
+    (latitude in 30.0..34.9 && longitude in 129.0..132.6) || // Kyushu and nearby islands
+        (latitude in 32.5..36.1 && longitude in 132.0..137.6) || // Shikoku and western Honshu
+        (latitude in 34.0..41.8 && longitude in 135.0..142.6) || // Central and northern Honshu
+        (latitude in 41.0..46.6 && longitude in 139.0..146.1) || // Hokkaido
+        (latitude in 33.8..34.8 && longitude in 128.8..130.0) || // Tsushima
+        (latitude in 35.5..37.0 && longitude in 132.5..134.6) || // Oki Islands
+        (latitude in 24.0..30.9 && longitude in 122.5..132.6) || // Nansei Islands
+        (latitude in 20.0..28.6 && longitude in 136.0..154.5) // Ogasawara and remote islands
 
 fun WeatherLocation.identityKey(): String {
     if (isDeviceLocation()) return "device-location"
@@ -250,6 +268,7 @@ data class GeocodingResult(
     val latitude: Double,
     val longitude: Double,
     val country: String? = null,
+    @SerialName("country_code") val countryCode: String? = null,
     @SerialName("admin1") val admin1: String? = null,
     @SerialName("admin2") val admin2: String? = null,
 )
@@ -274,13 +293,13 @@ data class RadarPrecipitation(
 )
 
 val PresetLocations = listOf(
-    WeatherLocation("東京駅", 35.681236, 139.767125),
-    WeatherLocation("東京", 35.6764, 139.6500),
-    WeatherLocation("横浜", 35.4437, 139.6380),
-    WeatherLocation("大阪", 34.6937, 135.5023),
-    WeatherLocation("名古屋", 35.1815, 136.9066),
-    WeatherLocation("福岡", 33.5902, 130.4017),
-    WeatherLocation("札幌", 43.0618, 141.3545),
+    WeatherLocation("東京駅", 35.681236, 139.767125, countryCode = "JP"),
+    WeatherLocation("東京", 35.6764, 139.6500, countryCode = "JP"),
+    WeatherLocation("横浜", 35.4437, 139.6380, countryCode = "JP"),
+    WeatherLocation("大阪", 34.6937, 135.5023, countryCode = "JP"),
+    WeatherLocation("名古屋", 35.1815, 136.9066, countryCode = "JP"),
+    WeatherLocation("福岡", 33.5902, 130.4017, countryCode = "JP"),
+    WeatherLocation("札幌", 43.0618, 141.3545, countryCode = "JP"),
 )
 
 fun WeatherSnapshot.forecastDays(
@@ -340,5 +359,5 @@ fun weatherLabel(code: Int?): String = when (code) {
 fun GeocodingResult.toWeatherLocation(): WeatherLocation {
     val area = listOfNotNull(admin1, country).distinct().joinToString(" / ")
     val label = if (area.isBlank()) name else "$name ($area)"
-    return WeatherLocation(label, latitude, longitude)
+    return WeatherLocation(label, latitude, longitude, countryCode)
 }

@@ -46,6 +46,15 @@ class RadarPrecipitationRulesTest {
     }
 
     @Test
+    fun overseasLocationIsNotReportedAsAJmaRadarFailure() {
+        val snapshot = snapshot(null).copy(
+            location = WeatherLocation("シドニー", -33.86785, 151.20732, countryCode = "AU"),
+        )
+
+        assertEquals("レーダー対象外・予報値を表示", snapshot.radarObservationStatus())
+    }
+
+    @Test
     fun staleRadarDoesNotOverrideCurrentModel() {
         val observedAt = 1_000_000L
         val snapshot = snapshot(RadarPrecipitation(80.0, observedAt))

@@ -6,6 +6,7 @@ import com.example.weather.data.model.RadarFrame
 import com.example.weather.data.model.RadarPrecipitation
 import com.example.weather.data.model.RadarTargetTime
 import com.example.weather.data.model.WeatherLocation
+import com.example.weather.data.model.isInJapan
 import com.example.weather.data.model.radarIntensityLowerBound
 import com.example.weather.data.model.toRadarEpochMillis
 import kotlinx.coroutines.Dispatchers
@@ -56,9 +57,7 @@ class JmaRadarClient(
     }
 
     suspend fun latestPrecipitation(location: WeatherLocation): RadarPrecipitation? = withContext(Dispatchers.IO) {
-        if (location.latitude !in 20.0..48.0 || location.longitude !in 118.0..150.0) {
-            return@withContext null
-        }
+        if (!location.isInJapan()) return@withContext null
         val frame = latestFrame()
         val zoom = 10
         val tileCount = 1 shl zoom

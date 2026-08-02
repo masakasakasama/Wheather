@@ -112,6 +112,7 @@ import com.example.weather.data.model.RadarPrecipitation
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.sameSavedPlaceAs
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.appliesTo
 import com.example.weather.data.model.freshRadarPrecipitation
 import com.example.weather.data.model.effectiveMaxProbability
 import com.example.weather.data.model.effectivePrecipitationSum
@@ -124,6 +125,7 @@ import com.example.weather.data.model.hasMeasurablePrecipitation
 import com.example.weather.data.model.hasFreshObservation
 import com.example.weather.data.model.intensityLabel
 import com.example.weather.data.model.isRaining
+import com.example.weather.data.model.isInJapan
 import com.example.weather.data.model.maxPrecipitationProbabilityFromNow
 import com.example.weather.data.model.nextExpectedPrecipitation
 import com.example.weather.data.model.radarObservationStatus
@@ -159,7 +161,7 @@ fun HomeScreen(
     var showSettingsDialog by remember { mutableStateOf(false) }
     var selectedDayDate by remember { mutableStateOf<String?>(null) }
     val snapshot = state.snapshot
-    val disasterSummary = state.disasterSummary
+    val disasterSummary = state.disasterSummary?.takeIf { it.appliesTo(state.selectedLocation) }
     val uriHandler = LocalUriHandler.current
 
     LazyColumn(
@@ -450,8 +452,7 @@ private fun DailyForecastPanel(snapshot: WeatherSnapshot, displayDays: List<Dail
     val hours = snapshot.hourly.nextHours(snapshot.hourly.size, snapshot.timezone)
     val today = snapshot.today()
     val radar = snapshot.freshRadarPrecipitation()
-    val isJapanRadarArea = snapshot.location.latitude in 20.0..48.0 &&
-        snapshot.location.longitude in 118.0..150.0
+    val isJapanRadarArea = snapshot.location.isInJapan()
     val showRadarStatus = radar?.isRaining() == true ||
         (isJapanRadarArea && radar == null)
     SectionCard(containerColor = WeatherPalette.ForecastSurface) {
@@ -958,6 +959,7 @@ private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
     val today = snapshot.today()
     val currentWeatherCode = snapshot.effectiveCurrentWeatherCode()
     val currentWeatherLabel = snapshot.effectiveCurrentWeatherLabel()
+    val supportsJmaRadar = snapshot.location.isInJapan()
     val radar = snapshot.freshRadarPrecipitation()
     SectionCard(containerColor = WeatherPalette.ForecastSurface) {
         Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -977,29 +979,31 @@ private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
                 WeatherGlyph(code = currentWeatherCode, size = 48.dp)
             }
             CurrentTemperatureSourceRow(snapshot)
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(5.dp))
-                    .background(
-                        if (radar?.isRaining() == true) Color(0xFF381A1D) else WeatherPalette.SurfaceVariant,
+            if (supportsJmaRadar) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(5.dp))
+                        .background(
+                            if (radar?.isRaining() == true) Color(0xFF381A1D) else WeatherPalette.SurfaceVariant,
+                        )
+                        .padding(horizontal = 10.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Icon(
+                        if (radar?.isRaining() == true) Icons.Filled.WarningAmber else Icons.Outlined.WaterDrop,
+                        contentDescription = null,
+                        tint = if (radar?.isRaining() == true) Color(0xFFFF8A80) else WeatherPalette.Rain,
+                        modifier = Modifier.size(18.dp),
                     )
-                    .padding(horizontal = 10.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                Icon(
-                    if (radar?.isRaining() == true) Icons.Filled.WarningAmber else Icons.Outlined.WaterDrop,
-                    contentDescription = null,
-                    tint = if (radar?.isRaining() == true) Color(0xFFFF8A80) else WeatherPalette.Rain,
-                    modifier = Modifier.size(18.dp),
-                )
-                Text(
-                    snapshot.radarObservationStatus(),
-                    color = if (radar?.isRaining() == true) Color(0xFFFFB4AB) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    fontSize = 12.sp,
-                    fontWeight = if (radar?.isRaining() == true) FontWeight.Bold else FontWeight.Normal,
-                )
+                    Text(
+                        snapshot.radarObservationStatus(),
+                        color = if (radar?.isRaining() == true) Color(0xFFFFB4AB) else MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 12.sp,
+                        fontWeight = if (radar?.isRaining() == true) FontWeight.Bold else FontWeight.Normal,
+                    )
+                }
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                 CurrentMetric(
@@ -1022,14 +1026,16 @@ private fun CurrentConditionsPanel(snapshot: WeatherSnapshot) {
                 CurrentMetric("AQI", snapshot.airQuality?.europeanAqi?.toString() ?: "--", Modifier.weight(1f), 15)
                 CurrentMetric("UV", today?.uvIndexMax.uvText(), Modifier.weight(1f), 15)
             }
-            RadarPreview(
-                location = snapshot.location,
-                refreshKey = snapshot.updatedAtMillis,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(170.dp)
-                    .clip(RoundedCornerShape(5.dp)),
-            )
+            if (supportsJmaRadar) {
+                RadarPreview(
+                    location = snapshot.location,
+                    refreshKey = snapshot.updatedAtMillis,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(170.dp)
+                        .clip(RoundedCornerShape(5.dp)),
+                )
+            }
         }
     }
 }
