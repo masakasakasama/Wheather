@@ -1,0 +1,2 @@
+Force latest-debug APK rebuild after precipitation single-source-of-truth refactor.
+Triggered: 2026-08-07
