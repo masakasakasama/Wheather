@@ -16,12 +16,13 @@ import com.example.weather.R
 import com.example.weather.data.model.DisasterSummary
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.NotificationSettings
+import com.example.weather.data.model.PrecipitationPolicy
+import com.example.weather.data.model.PrecipitationState
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.displayLabel
 import com.example.weather.data.model.forecastAreaKey
 import com.example.weather.data.model.forecastZoneId
 import com.example.weather.data.model.freshRadarPrecipitation
-import com.example.weather.data.model.hasMeasurablePrecipitation
 import com.example.weather.data.model.intensityLabel
 import com.example.weather.data.model.isRaining
 import java.time.LocalDateTime
@@ -68,22 +69,46 @@ class WeatherNotificationCenter(
             )
             return
         }
+
         val amountThreshold = settings.rainAmountThresholdMm.coerceAtLeast(0.1)
-        val rainHour = snapshot.hourly.nextNotificationHours(settings.rainLookAheadHours, snapshot).firstOrNull {
-            (it.precipitationProbability ?: 0) >= settings.rainProbabilityThreshold ||
-                (it.precipitationMm ?: 0.0) >= amountThreshold
+        val rainHour = snapshot.hourly.nextNotificationHours(settings.rainLookAheadHours, snapshot).firstOrNull { hour ->
+            val assessment = PrecipitationPolicy.assess(
+                probabilityPercent = hour.precipitationProbability,
+                amountMm = hour.precipitationMm,
+                weatherCode = hour.weatherCode,
+            )
+            val meetsAmountThreshold = PrecipitationPolicy.isMeasurable(hour.precipitationMm, amountThreshold)
+            val meetsProbabilityThreshold =
+                (assessment.probabilityPercent ?: 0) >= settings.rainProbabilityThreshold
+            meetsAmountThreshold || meetsProbabilityThreshold
         } ?: return
+
+        val assessment = PrecipitationPolicy.assess(
+            probabilityPercent = rainHour.precipitationProbability,
+            amountMm = rainHour.precipitationMm,
+            weatherCode = rainHour.weatherCode,
+        )
         val signature =
-            "${snapshot.location.forecastAreaKey()}:${rainHour.time}:${rainHour.precipitationProbability}:${rainHour.precipitationMm}"
+            "${snapshot.location.forecastAreaKey()}:${rainHour.time}:${assessment.state}:${assessment.probabilityPercent}:${assessment.amountMm}"
         if (!shouldNotify("rain_signature", signature)) return
 
-        val probability = rainHour.precipitationProbability?.let { "$it%" } ?: "--%"
-        val precipitation = rainHour.precipitationMm?.let { "%.1fmm".format(it) } ?: "--mm"
-        val measurableRain = rainHour.hasMeasurablePrecipitation(amountThreshold)
+        val probability = assessment.probabilityPercent?.let { "$it%" } ?: "--%"
+        val precipitation = assessment.amountMm?.let { "%.1fmm".format(it) } ?: "--mm"
+        val meetsAmountThreshold = PrecipitationPolicy.isMeasurable(assessment.amountMm, amountThreshold)
+        val title = when {
+            meetsAmountThreshold -> "雨の予報があります"
+            assessment.state == PrecipitationState.AMOUNT_UNKNOWN -> "降水確率が上がります（雨量未取得）"
+            else -> "降水確率が上がります"
+        }
+        val amountNote = when {
+            assessment.state == PrecipitationState.PROBABILITY_ONLY -> "$precipitation（確率のみ）"
+            assessment.state == PrecipitationState.AMOUNT_UNKNOWN -> "雨量未取得"
+            else -> precipitation
+        }
         show(
             id = NOTIFICATION_RAIN,
-            title = if (measurableRain) "雨の予報があります" else "降水確率が上がります",
-            text = "${formatDateHourLabel(rainHour.time)} 降水確率 $probability / 予想雨量 $precipitation",
+            title = title,
+            text = "${formatDateHourLabel(rainHour.time)} 降水確率 $probability / 予想雨量 $amountNote",
         )
     }
 

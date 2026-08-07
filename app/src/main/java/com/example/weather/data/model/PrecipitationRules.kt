@@ -3,7 +3,6 @@ package com.example.weather.data.model
 import java.time.LocalDateTime
 import java.time.ZoneId
 
-const val MEASURABLE_PRECIPITATION_MM = 0.1
 private val TOKYO_ZONE = ZoneId.of("Asia/Tokyo")
 
 data class ExpectedPrecipitation(
@@ -17,11 +16,11 @@ data class ExpectedPrecipitation(
 
 fun HourlyWeather.hasMeasurablePrecipitation(
     thresholdMm: Double = MEASURABLE_PRECIPITATION_MM,
-): Boolean = (precipitationMm ?: 0.0) >= thresholdMm
+): Boolean = PrecipitationPolicy.isMeasurable(precipitationMm, thresholdMm)
 
 fun MinutelyWeather.hasMeasurablePrecipitation(
     thresholdMm: Double = MEASURABLE_PRECIPITATION_MM,
-): Boolean = (precipitationMm ?: 0.0) >= thresholdMm
+): Boolean = PrecipitationPolicy.isMeasurable(precipitationMm, thresholdMm)
 
 fun WeatherSnapshot.nextExpectedPrecipitation(
     maxHours: Int = 48,
@@ -39,11 +38,11 @@ fun WeatherSnapshot.nextExpectedPrecipitation(
             radarPrecipitation = radar,
         )
     }
-    if (radar == null && (current.precipitationMm ?: 0.0) >= MEASURABLE_PRECIPITATION_MM) {
+    if (radar == null && PrecipitationPolicy.isMeasurable(current.precipitationMm)) {
         return ExpectedPrecipitation(
             time = current.time ?: now.toString(),
             probability = null,
-            amountMm = current.precipitationMm ?: 0.0,
+            amountMm = PrecipitationPolicy.normalizeAmount(current.precipitationMm) ?: 0.0,
             periodMinutes = 15,
             isCurrent = true,
         )
@@ -61,7 +60,7 @@ fun WeatherSnapshot.nextExpectedPrecipitation(
         return ExpectedPrecipitation(
             time = minute.time,
             probability = minute.precipitationProbability,
-            amountMm = minute.precipitationMm ?: 0.0,
+            amountMm = PrecipitationPolicy.normalizeAmount(minute.precipitationMm) ?: 0.0,
             periodMinutes = 15,
         )
     }
@@ -81,7 +80,7 @@ fun WeatherSnapshot.nextExpectedPrecipitation(
             ExpectedPrecipitation(
                 time = hour.time,
                 probability = hour.precipitationProbability,
-                amountMm = hour.precipitationMm ?: 0.0,
+                amountMm = PrecipitationPolicy.normalizeAmount(hour.precipitationMm) ?: 0.0,
                 periodMinutes = 60,
             )
         }
