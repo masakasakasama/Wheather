@@ -4,6 +4,7 @@ const val MEASURABLE_PRECIPITATION_MM = 0.1
 
 enum class PrecipitationState {
     MEASURABLE,
+    TRACE,
     PROBABILITY_ONLY,
     NO_PRECIPITATION,
     AMOUNT_UNKNOWN,
@@ -29,36 +30,31 @@ data class PrecipitationInvariantViolation(
     val message: String,
 )
 
+/**
+ * Normalizes bad numeric input without inventing a relationship between fields.
+ *
+ * Weather providers intentionally expose condition/type, probability and amount as
+ * separate signals with different valid-time semantics. For example, Open-Meteo's
+ * weather_code is instantaneous while hourly precipitation is an accumulation for
+ * the preceding hour. A rain/drizzle code with 0.0 mm therefore must not be rewritten
+ * to cloudy just because the accumulation rounds to zero.
+ */
 object PrecipitationPolicy {
-    private val amountBoundWeatherCodes = setOf(
-        51, 53, 55, 56, 57,
-        61, 63, 65, 66, 67,
-        71, 73, 75, 77,
-        80, 81, 82,
-        85, 86,
-    )
-
     fun normalizeAmount(value: Double?): Double? = when {
         value == null -> null
         !value.isFinite() -> null
-        value <= 0.0 -> 0.0
-        value < MEASURABLE_PRECIPITATION_MM -> 0.0
+        value < 0.0 -> null
         else -> value
     }
 
-    fun normalizeWeatherCode(code: Int?, amountMm: Double?): Int? {
-        val normalizedAmount = normalizeAmount(amountMm)
-        if (normalizedAmount == null || normalizedAmount >= MEASURABLE_PRECIPITATION_MM) return code
-        return if (code in amountBoundWeatherCodes) 3 else code
-    }
+    /** Kept as a compatibility API. Provider weather condition is preserved. */
+    fun normalizeWeatherCode(code: Int?, amountMm: Double?): Int? = code
 
-    fun normalizeSample(code: Int?, amountMm: Double?): NormalizedPrecipitationSample {
-        val normalizedAmount = normalizeAmount(amountMm)
-        return NormalizedPrecipitationSample(
-            weatherCode = normalizeWeatherCode(code, normalizedAmount),
-            amountMm = normalizedAmount,
+    fun normalizeSample(code: Int?, amountMm: Double?): NormalizedPrecipitationSample =
+        NormalizedPrecipitationSample(
+            weatherCode = code,
+            amountMm = normalizeAmount(amountMm),
         )
-    }
 
     fun isMeasurable(amountMm: Double?, thresholdMm: Double = MEASURABLE_PRECIPITATION_MM): Boolean {
         val normalizedAmount = normalizeAmount(amountMm) ?: return false
@@ -76,6 +72,7 @@ object PrecipitationPolicy {
         val state = when {
             sample.amountMm == null -> PrecipitationState.AMOUNT_UNKNOWN
             sample.amountMm >= MEASURABLE_PRECIPITATION_MM -> PrecipitationState.MEASURABLE
+            sample.amountMm > 0.0 -> PrecipitationState.TRACE
             (probability ?: 0) > 0 -> PrecipitationState.PROBABILITY_ONLY
             else -> PrecipitationState.NO_PRECIPITATION
         }
@@ -86,8 +83,6 @@ object PrecipitationPolicy {
             weatherCode = sample.weatherCode,
         )
     }
-
-    fun weatherCodeRequiresMeasurableAmount(code: Int?): Boolean = code in amountBoundWeatherCodes
 }
 
 fun WeatherSnapshot.enforcePrecipitationConsistency(): WeatherSnapshot {
@@ -113,30 +108,14 @@ fun WeatherSnapshot.enforcePrecipitationConsistency(): WeatherSnapshot {
 }
 
 fun WeatherSnapshot.precipitationInvariantViolations(): List<PrecipitationInvariantViolation> = buildList {
-    fun check(path: String, weatherCode: Int?, amountMm: Double?) {
+    fun check(path: String, amountMm: Double?) {
         if (amountMm != null && (!amountMm.isFinite() || amountMm < 0.0)) {
             add(PrecipitationInvariantViolation(path, "invalid precipitation amount: $amountMm"))
-            return
-        }
-        if (amountMm != null && amountMm > 0.0 && amountMm < MEASURABLE_PRECIPITATION_MM) {
-            add(PrecipitationInvariantViolation(path, "sub-threshold precipitation amount survived normalization: $amountMm"))
-        }
-        if (
-            amountMm == 0.0 &&
-            PrecipitationPolicy.weatherCodeRequiresMeasurableAmount(weatherCode)
-        ) {
-            add(PrecipitationInvariantViolation(path, "precipitation weather code $weatherCode contradicts 0.0mm"))
         }
     }
 
-    check("current", current.weatherCode, current.precipitationMm)
-    minutely15.forEachIndexed { index, minute ->
-        check("minutely15[$index]", minute.weatherCode, minute.precipitationMm)
-    }
-    hourly.forEachIndexed { index, hour ->
-        check("hourly[$index]", hour.weatherCode, hour.precipitationMm)
-    }
-    daily.forEachIndexed { index, day ->
-        check("daily[$index]", day.weatherCode, day.precipitationSumMm)
-    }
+    check("current", current.precipitationMm)
+    minutely15.forEachIndexed { index, minute -> check("minutely15[$index]", minute.precipitationMm) }
+    hourly.forEachIndexed { index, hour -> check("hourly[$index]", hour.precipitationMm) }
+    daily.forEachIndexed { index, day -> check("daily[$index]", day.precipitationSumMm) }
 }

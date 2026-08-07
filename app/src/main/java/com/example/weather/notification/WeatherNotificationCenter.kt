@@ -97,12 +97,14 @@ class WeatherNotificationCenter(
         val meetsAmountThreshold = PrecipitationPolicy.isMeasurable(assessment.amountMm, amountThreshold)
         val title = when {
             meetsAmountThreshold -> "雨の予報があります"
+            assessment.state == PrecipitationState.TRACE -> "ごく弱い降水の可能性"
             assessment.state == PrecipitationState.AMOUNT_UNKNOWN -> "降水確率が上がります（雨量未取得）"
             else -> "降水確率が上がります"
         }
-        val amountNote = when {
-            assessment.state == PrecipitationState.PROBABILITY_ONLY -> "$precipitation（確率のみ）"
-            assessment.state == PrecipitationState.AMOUNT_UNKNOWN -> "雨量未取得"
+        val amountNote = when (assessment.state) {
+            PrecipitationState.TRACE -> "0.1mm未満（微量）"
+            PrecipitationState.PROBABILITY_ONLY -> "$precipitation（確率のみ）"
+            PrecipitationState.AMOUNT_UNKNOWN -> "雨量未取得"
             else -> precipitation
         }
         show(
