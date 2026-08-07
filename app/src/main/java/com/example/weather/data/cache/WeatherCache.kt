@@ -4,11 +4,12 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.NotificationSettings
+import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.TemperatureAccuracyState
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.applyConsumerForecastProjection
 import com.example.weather.data.model.canonicalizedSavedLocations
 import com.example.weather.data.model.enforcePrecipitationConsistency
 import com.example.weather.data.model.sameForecastPlaceAs
@@ -83,7 +84,9 @@ class WeatherCache(
     }.first()
 
     suspend fun saveSnapshot(snapshot: WeatherSnapshot) {
-        val consistentSnapshot = snapshot.enforcePrecipitationConsistency()
+        val consistentSnapshot = snapshot
+            .enforcePrecipitationConsistency()
+            .applyConsumerForecastProjection()
         context.weatherDataStore.edit { preferences ->
             preferences[snapshotKey] = json.encodeToString(consistentSnapshot)
         }
@@ -93,7 +96,9 @@ class WeatherCache(
         snapshot: WeatherSnapshot,
         accuracyState: TemperatureAccuracyState,
     ) {
-        val consistentSnapshot = snapshot.enforcePrecipitationConsistency()
+        val consistentSnapshot = snapshot
+            .enforcePrecipitationConsistency()
+            .applyConsumerForecastProjection()
         context.weatherDataStore.edit { preferences ->
             preferences[snapshotKey] = json.encodeToString(consistentSnapshot)
             preferences[temperatureAccuracyKey] = json.encodeToString(accuracyState)
@@ -122,4 +127,5 @@ class WeatherCache(
         runCatching { json.decodeFromString<WeatherSnapshot>(raw) }
             .getOrNull()
             ?.enforcePrecipitationConsistency()
+            ?.applyConsumerForecastProjection()
 }
