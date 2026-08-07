@@ -11,6 +11,7 @@ import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.canonicalizedSavedLocations
+import com.example.weather.data.model.enforcePrecipitationConsistency
 import com.example.weather.data.model.identityKey
 import com.example.weather.data.model.isDeviceLocation
 import com.example.weather.data.model.isInJapan
@@ -85,7 +86,7 @@ class WeatherRepository(
                     ),
                 )
             }
-            val snapshot = result.snapshot
+            val snapshot = result.snapshot.enforcePrecipitationConsistency()
             val selectedLocation = cache.readLocationOnce()
             check(location.sameForecastPlaceAs(selectedLocation)) {
                 "Selected location changed while weather was loading"
