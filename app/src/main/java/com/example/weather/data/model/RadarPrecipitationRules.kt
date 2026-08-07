@@ -22,7 +22,8 @@ fun radarIntensityLowerBound(
     }
 }
 
-fun RadarPrecipitation.isRaining(): Boolean = intensityLowerBoundMmPerHour >= 0.1
+fun RadarPrecipitation.isRaining(): Boolean =
+    PrecipitationPolicy.isMeasurable(intensityLowerBoundMmPerHour)
 
 fun RadarPrecipitation.intensityLabel(): String = when {
     intensityLowerBoundMmPerHour >= 80.0 -> "猛烈な雨"
@@ -32,7 +33,7 @@ fun RadarPrecipitation.intensityLabel(): String = when {
     intensityLowerBoundMmPerHour >= 10.0 -> "やや強い雨"
     intensityLowerBoundMmPerHour >= 5.0 -> "雨"
     intensityLowerBoundMmPerHour >= 1.0 -> "弱い雨"
-    intensityLowerBoundMmPerHour >= 0.1 -> "ごく弱い雨"
+    intensityLowerBoundMmPerHour >= MEASURABLE_PRECIPITATION_MM -> "ごく弱い雨"
     else -> "降雨なし"
 }
 
