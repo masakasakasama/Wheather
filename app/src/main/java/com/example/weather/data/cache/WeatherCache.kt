@@ -10,6 +10,7 @@ import com.example.weather.data.model.TemperatureAccuracyState
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.canonicalizedSavedLocations
+import com.example.weather.data.model.enforcePrecipitationConsistency
 import com.example.weather.data.model.sameForecastPlaceAs
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -35,7 +36,7 @@ class WeatherCache(
     private val temperatureAccuracyKey = stringPreferencesKey("temperature_accuracy")
 
     val snapshot: Flow<WeatherSnapshot?> = context.weatherDataStore.data.map { preferences ->
-        preferences[snapshotKey]?.let { runCatching { json.decodeFromString<WeatherSnapshot>(it) }.getOrNull() }
+        preferences[snapshotKey]?.let(::decodeConsistentSnapshot)
     }
 
     val selectedLocation: Flow<WeatherLocation> = context.weatherDataStore.data.map { preferences ->
@@ -64,7 +65,7 @@ class WeatherCache(
             ?.let { runCatching { json.decodeFromString<WeatherLocation>(it) }.getOrNull() }
             ?: PresetLocations.first()
         val matchingSnapshot = preferences[snapshotKey]
-            ?.let { runCatching { json.decodeFromString<WeatherSnapshot>(it) }.getOrNull() }
+            ?.let(::decodeConsistentSnapshot)
             ?.takeIf { it.location.sameForecastPlaceAs(selected) }
         WidgetWeatherState(selected, matchingSnapshot)
     }.first()
@@ -82,8 +83,9 @@ class WeatherCache(
     }.first()
 
     suspend fun saveSnapshot(snapshot: WeatherSnapshot) {
+        val consistentSnapshot = snapshot.enforcePrecipitationConsistency()
         context.weatherDataStore.edit { preferences ->
-            preferences[snapshotKey] = json.encodeToString(snapshot)
+            preferences[snapshotKey] = json.encodeToString(consistentSnapshot)
         }
     }
 
@@ -91,8 +93,9 @@ class WeatherCache(
         snapshot: WeatherSnapshot,
         accuracyState: TemperatureAccuracyState,
     ) {
+        val consistentSnapshot = snapshot.enforcePrecipitationConsistency()
         context.weatherDataStore.edit { preferences ->
-            preferences[snapshotKey] = json.encodeToString(snapshot)
+            preferences[snapshotKey] = json.encodeToString(consistentSnapshot)
             preferences[temperatureAccuracyKey] = json.encodeToString(accuracyState)
         }
     }
@@ -114,4 +117,9 @@ class WeatherCache(
             preferences[notificationSettingsKey] = json.encodeToString(settings)
         }
     }
+
+    private fun decodeConsistentSnapshot(raw: String): WeatherSnapshot? =
+        runCatching { json.decodeFromString<WeatherSnapshot>(raw) }
+            .getOrNull()
+            ?.enforcePrecipitationConsistency()
 }
