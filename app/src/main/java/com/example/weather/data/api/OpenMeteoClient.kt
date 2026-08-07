@@ -11,6 +11,7 @@ import com.example.weather.data.model.MultiModelTemperatureForecast
 import com.example.weather.data.model.OpenMeteoResponse
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.enforcePrecipitationConsistency
 import com.example.weather.data.model.identityKey
 import com.example.weather.data.model.toWeatherLocation
 import kotlinx.coroutines.Dispatchers
@@ -24,22 +25,6 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.IOException
-
-private const val MIN_MEASURABLE_PRECIPITATION_MM = 0.1
-
-internal fun normalizedPrecipitationMm(value: Double?): Double? = when {
-    value == null -> null
-    value < MIN_MEASURABLE_PRECIPITATION_MM -> 0.0
-    else -> value
-}
-
-internal fun weatherCodeConsistentWithPrecipitation(code: Int?, precipitationMm: Double?): Int? {
-    if (precipitationMm == null || precipitationMm >= MIN_MEASURABLE_PRECIPITATION_MM) return code
-    return when (code) {
-        51, 53, 55, 56, 57, 61, 63, 65, 66, 67, 80, 81, 82 -> 3
-        else -> code
-    }
-}
 
 class OpenMeteoClient(
     private val httpClient: OkHttpClient,
@@ -155,60 +140,47 @@ class OpenMeteoClient(
 
     private fun OpenMeteoResponse.toSnapshot(location: WeatherLocation): WeatherSnapshot {
         val minutelyItems = minutely15?.time.orEmpty().mapIndexed { index, time ->
-            val rawPrecipitation = minutely15?.precipitation?.getOrNull(index)
             MinutelyWeather(
                 time = time,
                 temperatureC = minutely15?.temperature?.getOrNull(index),
                 precipitationProbability = minutely15?.precipitationProbability?.getOrNull(index),
-                weatherCode = weatherCodeConsistentWithPrecipitation(
-                    minutely15?.weatherCode?.getOrNull(index),
-                    rawPrecipitation,
-                ),
-                precipitationMm = normalizedPrecipitationMm(rawPrecipitation),
+                weatherCode = minutely15?.weatherCode?.getOrNull(index),
+                precipitationMm = minutely15?.precipitation?.getOrNull(index),
             )
         }
         val hourlyItems = hourly?.time.orEmpty().mapIndexed { index, time ->
-            val rawPrecipitation = hourly?.precipitation?.getOrNull(index)
             HourlyWeather(
                 time = time,
                 temperatureC = hourly?.temperature?.getOrNull(index),
                 precipitationProbability = hourly?.precipitationProbability?.getOrNull(index),
-                weatherCode = weatherCodeConsistentWithPrecipitation(
-                    hourly?.weatherCode?.getOrNull(index),
-                    rawPrecipitation,
-                ),
-                precipitationMm = normalizedPrecipitationMm(rawPrecipitation),
+                weatherCode = hourly?.weatherCode?.getOrNull(index),
+                precipitationMm = hourly?.precipitation?.getOrNull(index),
                 humidityPercent = hourly?.humidity?.getOrNull(index),
                 windSpeedKmh = hourly?.windSpeed?.getOrNull(index),
                 windDirectionDeg = hourly?.windDirection?.getOrNull(index),
             )
         }
         val dailyItems = daily?.time.orEmpty().mapIndexed { index, date ->
-            val rawPrecipitation = daily?.precipitationSum?.getOrNull(index)
             DailyWeather(
                 date = date,
-                weatherCode = weatherCodeConsistentWithPrecipitation(
-                    daily?.weatherCode?.getOrNull(index),
-                    rawPrecipitation,
-                ),
+                weatherCode = daily?.weatherCode?.getOrNull(index),
                 maxTemperatureC = daily?.maxTemperature?.getOrNull(index),
                 minTemperatureC = daily?.minTemperature?.getOrNull(index),
                 maxPrecipitationProbability = daily?.maxPrecipitationProbability?.getOrNull(index),
-                precipitationSumMm = normalizedPrecipitationMm(rawPrecipitation),
+                precipitationSumMm = daily?.precipitationSum?.getOrNull(index),
                 uvIndexMax = daily?.uvIndexMax?.getOrNull(index),
                 sunrise = daily?.sunrise?.getOrNull(index),
                 sunset = daily?.sunset?.getOrNull(index),
             )
         }
-        val currentPrecipitation = current?.precipitation
         return WeatherSnapshot(
             location = location,
             current = CurrentWeather(
                 temperatureC = current?.temperature,
                 apparentTemperatureC = current?.apparentTemperature,
                 humidityPercent = current?.humidity,
-                weatherCode = weatherCodeConsistentWithPrecipitation(current?.weatherCode, currentPrecipitation),
-                precipitationMm = normalizedPrecipitationMm(currentPrecipitation),
+                weatherCode = current?.weatherCode,
+                precipitationMm = current?.precipitation,
                 windSpeedKmh = current?.windSpeed,
                 windDirectionDeg = current?.windDirection,
                 pressureHpa = current?.pressure,
@@ -220,7 +192,7 @@ class OpenMeteoClient(
             daily = dailyItems,
             updatedAtMillis = System.currentTimeMillis(),
             timezone = timezone ?: "Asia/Tokyo",
-        )
+        ).enforcePrecipitationConsistency()
     }
 
     private fun parseTemperatureModels(body: String): MultiModelTemperatureForecast {
