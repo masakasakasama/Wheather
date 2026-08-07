@@ -10,17 +10,18 @@ import com.example.weather.data.cache.WeatherCache
 import com.example.weather.data.model.NotificationSettings
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
+import com.example.weather.data.model.applyConsumerForecastProjection
 import com.example.weather.data.model.canonicalizedSavedLocations
 import com.example.weather.data.model.enforcePrecipitationConsistency
 import com.example.weather.data.model.identityKey
 import com.example.weather.data.model.isDeviceLocation
 import com.example.weather.data.model.isInJapan
 import com.example.weather.data.model.sameForecastPlaceAs
-import com.example.weather.widget.WeatherWidget
 import com.example.weather.widget.WeatherSquareWidget
-import kotlinx.coroutines.flow.Flow
+import com.example.weather.widget.WeatherWidget
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -86,7 +87,9 @@ class WeatherRepository(
                     ),
                 )
             }
-            val snapshot = result.snapshot.enforcePrecipitationConsistency()
+            val snapshot = result.snapshot
+                .enforcePrecipitationConsistency()
+                .applyConsumerForecastProjection()
             val selectedLocation = cache.readLocationOnce()
             check(location.sameForecastPlaceAs(selectedLocation)) {
                 "Selected location changed while weather was loading"
