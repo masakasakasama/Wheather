@@ -42,6 +42,43 @@ private val WetFamilies = setOf(
     ConditionFamily.THUNDERSTORM,
 )
 
+/**
+ * Converts a raw forecast snapshot into the view that a normal consumer weather app
+ * needs at this moment. Past hourly/minutely periods are removed, today's daily card
+ * is rebuilt from the remaining hours, and future day codes are made representative
+ * instead of blindly using Open-Meteo's "most severe condition of the day" code.
+ *
+ * This runs after model-verification logic, so trimming old hours does not remove
+ * inputs needed by the temperature consensus engine.
+ */
+fun WeatherSnapshot.applyConsumerForecastProjection(
+    now: LocalDateTime = LocalDateTime.now(forecastZoneId()),
+): WeatherSnapshot {
+    val currentHour = now.withMinute(0).withSecond(0).withNano(0)
+    val futureHourly = hourly.filter { hour ->
+        runCatching { !LocalDateTime.parse(hour.time).isBefore(currentHour) }.getOrDefault(false)
+    }
+    val futureMinutely = minutely15.filter { minute ->
+        runCatching { LocalDateTime.parse(minute.time).plusMinutes(15).isAfter(now) }.getOrDefault(false)
+    }
+    val base = copy(hourly = futureHourly, minutely15 = futureMinutely)
+    val today = now.toLocalDate()
+    val projectedDaily = base.daily.map { day ->
+        val date = runCatching { LocalDate.parse(day.date) }.getOrNull()
+        if (date == null || date.isBefore(today)) {
+            day
+        } else {
+            val presentation = base.presentationForDay(day, now)
+            day.copy(
+                weatherCode = presentation.weatherCode,
+                maxPrecipitationProbability = presentation.precipitationProbability,
+                precipitationSumMm = presentation.precipitationAmountMm,
+            )
+        }
+    }
+    return base.copy(daily = projectedDaily)
+}
+
 fun WeatherSnapshot.presentationForDay(
     day: DailyWeather,
     now: LocalDateTime = LocalDateTime.now(forecastZoneId()),
@@ -111,18 +148,15 @@ private fun representativeCondition(
         return RepresentativeCondition(fallbackCode, weatherLabel(fallbackCode), false)
     }
 
-    val familyCounts = codedHours
-        .groupingBy { conditionFamily(it.weatherCode) }
-        .eachCount()
     val wetHours = codedHours.filter { conditionFamily(it.weatherCode) in WetFamilies }
     val dryHours = codedHours.filterNot { conditionFamily(it.weatherCode) in WetFamilies }
     val maxProbability = hours.mapNotNull { it.precipitationProbability }.maxOrNull() ?: 0
     val totalAmount = hours.mapNotNull { PrecipitationPolicy.normalizeAmount(it.precipitationMm) }.sum()
     val hasThunder = wetHours.any { conditionFamily(it.weatherCode) == ConditionFamily.THUNDERSTORM }
 
-    // A single short drizzle/shower should not turn a whole-day consumer card into
-    // a rain card. Sustained precipitation, meaningful accumulation, high PoP, and
-    // any thunderstorm remain prominent.
+    // One isolated drizzle/shower hour should not turn the whole daily card rainy.
+    // Sustained precipitation, meaningful accumulation, high PoP, and any thunder
+    // remain prominent. This is closer to day-summary behavior in consumer apps.
     val significantWet = hasThunder ||
         wetHours.size >= 2 ||
         totalAmount >= 0.5 ||
