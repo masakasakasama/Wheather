@@ -114,6 +114,45 @@ class ForecastPresentationPolicyTest {
         assertEquals(95, snapshot.presentationForDay(day, now).weatherCode)
     }
 
+    @Test
+    fun futureDailyProbabilityUsesRepresentativeHoursInsteadOfSingleSpike() {
+        val now = LocalDateTime.parse("2026-08-07T08:00")
+        val day = DailyWeather("2026-08-08", 2, 33.0, 26.0, 95, precipitationSumMm = 0.2)
+        val hours = (9..20).map { hourOfDay ->
+  val spike = hourOfDay == 15
+  hour(
+      time = "2026-08-08T${hourOfDay.toString().padStart(2, '0')}:00",
+      code = if (spike) 51 else 2,
+      probability = if (spike) 95 else 20,
+      amount = if (spike) 0.2 else 0.0,
+  )
+        }
+        val presentation = snapshot(hourly = hours, daily = listOf(day)).presentationForDay(day, now)
+
+        assertEquals(20, presentation.precipitationProbability)
+        assertEquals(2, presentation.weatherCode)
+        assertTrue(presentation.hasBriefPrecipitation)
+    }
+
+    @Test
+    fun twoShortRainHoursDoNotBecomeAllDayRainJustBecauseTotalExceedsTwoMillimeters() {
+        val now = LocalDateTime.parse("2026-08-07T08:00")
+        val day = DailyWeather("2026-08-08", 63, 33.0, 26.0, 90, precipitationSumMm = 2.4)
+        val hours = (9..20).map { hourOfDay ->
+  val rainy = hourOfDay == 13 || hourOfDay == 14
+  hour(
+      time = "2026-08-08T${hourOfDay.toString().padStart(2, '0')}:00",
+      code = if (rainy) 61 else 2,
+      probability = if (rainy) 90 else 20,
+      amount = if (rainy) 1.2 else 0.0,
+  )
+        }
+        val presentation = snapshot(hourly = hours, daily = listOf(day)).presentationForDay(day, now)
+
+        assertEquals(2, presentation.weatherCode)
+        assertTrue(presentation.hasBriefPrecipitation)
+    }
+
     private fun snapshot(
         hourly: List<HourlyWeather>,
         daily: List<DailyWeather>,

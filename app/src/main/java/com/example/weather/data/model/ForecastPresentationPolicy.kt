@@ -105,11 +105,11 @@ fun WeatherSnapshot.presentationForDay(
         hours = relevantHours,
         fallbackCode = day.weatherCode,
     )
-    val hourlyProbability = relevantHours.mapNotNull { it.precipitationProbability }.maxOrNull()
+    val hourlyProbabilities = relevantHours.mapNotNull { it.precipitationProbability }
     val probability = if (isToday) {
-        hourlyProbability
+        hourlyProbabilities.maxOrNull()
     } else {
-        listOfNotNull(day.maxPrecipitationProbability, hourlyProbability).maxOrNull()
+        representativeDailyProbability(hourlyProbabilities, day.maxPrecipitationProbability)
     }
     val hourlyAmounts = relevantHours.mapNotNull { PrecipitationPolicy.normalizeAmount(it.precipitationMm) }
     val hourlyAmount = hourlyAmounts.takeIf { it.isNotEmpty() }?.sum()
@@ -163,10 +163,10 @@ private fun representativeCondition(
     // the primary condition only when it is sustained, materially accumulates, covers
     // a large share of the remaining day, or includes thunder.
     val significantWet = hasThunder ||
-        totalAmount >= 2.0 ||
-        wetShare >= 0.40 ||
-        (measurableWetHours.size >= 3 && wetShare >= 0.25) ||
-        (measurableWetHours.size >= 2 && wetShare >= 0.25 && maxProbability >= 70 && totalAmount >= 0.5)
+        totalAmount >= 5.0 ||
+        wetShare >= 0.45 ||
+        (measurableWetHours.size >= 4 && wetShare >= 0.25) ||
+        (measurableWetHours.size >= 3 && wetShare >= 0.20 && maxProbability >= 70 && totalAmount >= 1.0)
 
     val selectedFamily = when {
         significantWet -> selectFamily(wetHours)
@@ -191,6 +191,13 @@ private fun representativeCondition(
         label = label,
         hasBriefPrecipitation = briefWetFamily != null,
     )
+}
+
+private fun representativeDailyProbability(probabilities: List<Int>, fallback: Int?): Int? {
+    if (probabilities.isEmpty()) return fallback
+    val sorted = probabilities.sorted()
+    val index = ((sorted.lastIndex * 3) / 4).coerceIn(0, sorted.lastIndex)
+    return sorted[index]
 }
 
 private fun selectFamily(hours: List<HourlyWeather>): ConditionFamily {
