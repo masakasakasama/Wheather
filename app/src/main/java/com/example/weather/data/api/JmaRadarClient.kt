@@ -3,11 +3,13 @@ package com.example.weather.data.api
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import com.example.weather.data.model.RadarFrame
+import com.example.weather.data.model.RadarPixelSample
 import com.example.weather.data.model.RadarPrecipitation
 import com.example.weather.data.model.RadarTargetTime
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.isInJapan
 import com.example.weather.data.model.radarIntensityLowerBound
+import com.example.weather.data.model.representativeRadarIntensity
 import com.example.weather.data.model.toRadarEpochMillis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,7 +35,8 @@ class JmaRadarClient(
         httpClient.newCall(request).execute().use { response ->
             if (!response.isSuccessful) throw IOException("JMA radar target time request failed")
             val body = response.body?.string().orEmpty()
-            val latest = json.decodeFromString(ListSerializer(RadarTargetTime.serializer()), body).firstOrNull()
+            val latest = json.decodeFromString(ListSerializer(RadarTargetTime.serializer()), body)
+                .maxByOrNull { it.validtime }
                 ?: throw IOException("JMA radar target time is empty")
             RadarFrame(
                 baseTime = latest.basetime,
@@ -73,28 +76,33 @@ class JmaRadarClient(
             .replace("{x}", tileX.toString())
             .replace("{y}", tileY.toString())
         val bitmap = fetchBitmap(radarUrl) ?: throw IOException("JMA radar tile request failed")
-        val radius = 3
-        var strongestIntensity = 0.0
-        var recognizedPixel = false
-        for (y in (pixelY - radius).coerceAtLeast(0)..(pixelY + radius).coerceAtMost(bitmap.height - 1)) {
-            for (x in (pixelX - radius).coerceAtLeast(0)..(pixelX + radius).coerceAtMost(bitmap.width - 1)) {
+
+        val samples = mutableListOf<RadarPixelSample>()
+        val radius = 1
+        for (dy in -radius..radius) {
+            for (dx in -radius..radius) {
+                val x = pixelX + dx
+                val y = pixelY + dy
+                if (x !in 0 until bitmap.width || y !in 0 until bitmap.height) continue
                 val color = bitmap.getPixel(x, y)
-                val intensity = radarIntensityLowerBound(
-                    alpha = color ushr 24 and 0xFF,
-                    red = color ushr 16 and 0xFF,
-                    green = color ushr 8 and 0xFF,
-                    blue = color and 0xFF,
+                samples += RadarPixelSample(
+                    dx = dx,
+                    dy = dy,
+                    intensityLowerBoundMmPerHour = radarIntensityLowerBound(
+                        alpha = color ushr 24 and 0xFF,
+                        red = color ushr 16 and 0xFF,
+                        green = color ushr 8 and 0xFF,
+                        blue = color and 0xFF,
+                    ),
                 )
-                if (intensity != null) {
-                    recognizedPixel = true
-                    strongestIntensity = maxOf(strongestIntensity, intensity)
-                }
             }
         }
         bitmap.recycle()
-        if (!recognizedPixel) throw IOException("JMA radar tile color was not recognized")
+
+        val representativeIntensity = representativeRadarIntensity(samples)
+            ?: throw IOException("JMA radar tile color coverage was insufficient")
         RadarPrecipitation(
-            intensityLowerBoundMmPerHour = strongestIntensity,
+            intensityLowerBoundMmPerHour = representativeIntensity,
             observedAtMillis = frame.validTime.toRadarEpochMillis(),
         )
     }
