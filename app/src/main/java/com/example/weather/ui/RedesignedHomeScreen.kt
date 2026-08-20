@@ -89,17 +89,17 @@ import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private val RedesignBlue = Color(0xFF2F7AF8)
-private val RedesignText = Color(0xFF10233A)
-private val RedesignMuted = Color(0xFF6C7C8E)
-private val RedesignCard = Color.White
-private val RedesignSoftBlue = Color(0xFFEAF3FF)
-private val RedesignSoftGreen = Color(0xFFEAF8F0)
-private val RedesignGreen = Color(0xFF2EA66B)
-private val RedesignSoftPurple = Color(0xFFF1EDFF)
-private val RedesignPurple = Color(0xFF6B55DF)
-private val RedesignRed = Color(0xFFF15A4A)
-private val RedesignLow = Color(0xFF6D93D8)
+private val RedesignBlue = Color(0xFF5BA2FF)
+private val RedesignText = Color(0xFFF2F7FC)
+private val RedesignMuted = Color(0xFF9BAFC2)
+private val RedesignCard = Color(0xFF121A24)
+private val RedesignSoftBlue = Color(0xFF17283B)
+private val RedesignSoftGreen = Color(0xFF142A22)
+private val RedesignGreen = Color(0xFF55D58A)
+private val RedesignSoftPurple = Color(0xFF211C37)
+private val RedesignPurple = Color(0xFFA99BFF)
+private val RedesignRed = Color(0xFFFF7D70)
+private val RedesignLow = Color(0xFF8FB5FF)
 
 @Composable
 fun RedesignedHomeScreen(
@@ -142,7 +142,7 @@ fun RedesignedHomeScreen(
         state.errorMessage?.let { message ->
             item {
                 Snackbar(
-                    containerColor = Color(0xFFFFEEEE),
+                    containerColor = Color(0xFF3A1E22),
                     contentColor = RedesignText,
                     action = { TextButton(onClick = onDismissError) { Text("閉じる") } },
                 ) { Text(message) }
@@ -165,7 +165,7 @@ fun RedesignedHomeScreen(
                 ?.let { disaster ->
                     item {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF0ED)),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF351C1E)),
                             shape = RoundedCornerShape(20.dp),
                         ) {
                             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
@@ -338,7 +338,7 @@ private fun RedesignHero(snapshot: WeatherSnapshot) {
             Modifier
                 .background(
                     Brush.linearGradient(
-                        listOf(Color(0xFF65B4F2), Color(0xFFD8ECFF)),
+                        listOf(Color(0xFF163454), Color(0xFF0B1726)),
                         start = Offset.Zero,
                         end = Offset(900f, 1200f),
                     ),
@@ -363,7 +363,7 @@ private fun RedesignHero(snapshot: WeatherSnapshot) {
             }
 
             StatusCard(
-                background = if (radar?.isRaining() == true) Color(0xFFFFF1EA) else RedesignSoftGreen,
+                background = if (radar?.isRaining() == true) Color(0xFF38211D) else RedesignSoftGreen,
                 icon = if (radar?.isRaining() == true) "☔" else "✓",
                 iconColor = if (radar?.isRaining() == true) RedesignRed else RedesignGreen,
                 title = when {
@@ -400,7 +400,7 @@ private fun StatusCard(background: Color, icon: String, iconColor: Color, title:
         Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(background).padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(34.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.72f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(34.dp).clip(CircleShape).background(Color(0xFF0C141D).copy(alpha = 0.78f)), contentAlignment = Alignment.Center) {
             Text(icon, color = iconColor, fontWeight = FontWeight.Bold, fontSize = 17.sp)
         }
         Spacer(Modifier.width(11.dp))
@@ -463,7 +463,7 @@ private fun TemperatureLine(values: List<Double>, modifier: Modifier) {
             val point = Offset(index * step, y)
             previous?.let { drawLine(RedesignBlue, it, point, 2.dp.toPx(), cap = StrokeCap.Round) }
             drawCircle(RedesignBlue, radius = 3.dp.toPx(), center = point)
-            drawCircle(Color.White, radius = 1.2.dp.toPx(), center = point)
+            drawCircle(Color(0xFFEAF3FF), radius = 1.2.dp.toPx(), center = point)
             previous = point
         }
     }
@@ -535,7 +535,7 @@ private fun RedesignSources(snapshot: WeatherSnapshot) {
 @Composable
 private fun SourceRow(icon: String, title: String, detail: String) {
     Row(verticalAlignment = Alignment.Top) {
-        Box(Modifier.size(28.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.75f)), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(28.dp).clip(CircleShape).background(Color(0xFF0C141D).copy(alpha = 0.82f)), contentAlignment = Alignment.Center) {
             Text(icon, color = RedesignBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.width(9.dp))
