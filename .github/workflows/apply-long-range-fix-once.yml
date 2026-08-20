@@ -1,0 +1,217 @@
+name: Apply long range forecast presentation fix once
+
+on:
+  push:
+    branches: ["fix/long-range-rain-20260821"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/long-range-rain-20260821
+          fetch-depth: 0
+
+      - name: Make daily rain presentation less alarmist
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          policy = Path("app/src/main/java/com/example/weather/data/model/ForecastPresentationPolicy.kt")
+          text = policy.read_text()
+
+          old_probability = '''    val hourlyProbability = relevantHours.mapNotNull { it.precipitationProbability }.maxOrNull()
+    val probability = if (isToday) {
+        hourlyProbability
+    } else {
+        listOfNotNull(day.maxPrecipitationProbability, hourlyProbability).maxOrNull()
+    }'''
+          new_probability = '''    val hourlyProbabilities = relevantHours.mapNotNull { it.precipitationProbability }
+    val probability = if (isToday) {
+        hourlyProbabilities.maxOrNull()
+    } else {
+        representativeDailyProbability(hourlyProbabilities, day.maxPrecipitationProbability)
+    }'''
+          if old_probability not in text:
+              raise SystemExit("probability block not found")
+          text = text.replace(old_probability, new_probability, 1)
+
+          old_significant = '''    val significantWet = hasThunder ||
+        totalAmount >= 2.0 ||
+        wetShare >= 0.40 ||
+        (measurableWetHours.size >= 3 && wetShare >= 0.25) ||
+        (measurableWetHours.size >= 2 && wetShare >= 0.25 && maxProbability >= 70 && totalAmount >= 0.5)'''
+          new_significant = '''    val significantWet = hasThunder ||
+        totalAmount >= 5.0 ||
+        wetShare >= 0.45 ||
+        (measurableWetHours.size >= 4 && wetShare >= 0.25) ||
+        (measurableWetHours.size >= 3 && wetShare >= 0.20 && maxProbability >= 70 && totalAmount >= 1.0)'''
+          if old_significant not in text:
+              raise SystemExit("significant wet block not found")
+          text = text.replace(old_significant, new_significant, 1)
+
+          marker = '''private fun selectFamily(hours: List<HourlyWeather>): ConditionFamily {'''
+          helper = '''private fun representativeDailyProbability(probabilities: List<Int>, fallback: Int?): Int? {
+    if (probabilities.isEmpty()) return fallback
+    val sorted = probabilities.sorted()
+    val index = ((sorted.lastIndex * 3) / 4).coerceIn(0, sorted.lastIndex)
+    return sorted[index]
+}
+
+private fun selectFamily(hours: List<HourlyWeather>): ConditionFamily {'''
+          if marker not in text:
+              raise SystemExit("selectFamily marker not found")
+          text = text.replace(marker, helper, 1)
+          policy.write_text(text)
+
+          home = Path("app/src/main/java/com/example/weather/ui/RedesignedHomeScreen.kt")
+          text = home.read_text()
+          old_prob = 'day.effectiveMaxProbability(dayHours)?.let { "$it%" } ?: "--"'
+          if text.count(old_prob) < 2:
+              raise SystemExit(f"expected at least two effective max probability uses, got {text.count(old_prob)}")
+          text = text.replace(old_prob, 'day.maxPrecipitationProbability?.let { "$it%" } ?: "--"')
+
+          start = text.index('@Composable\nprivate fun RedesignExtendedForecast')
+          end = text.index('@Composable\nprivate fun RedesignMetrics', start)
+          new_extended = '''@Composable
+private fun RedesignExtendedForecast(snapshot: WeatherSnapshot, onClick: (DailyWeather) -> Unit) {
+    val days = snapshot.forecastDays().drop(2).take(12)
+    if (days.isEmpty()) return
+    Card(
+        colors = CardDefaults.cardColors(containerColor = RedesignCard),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("この先2週間", color = RedesignText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                Text("8日目以降は参考", color = RedesignMuted, fontSize = 9.sp)
+            }
+            days.forEachIndexed { index, day ->
+                val lowConfidence = index >= 6
+                val label = if (lowConfidence && isWetForecastCode(day.weatherCode)) {
+                    "雨の可能性"
+                } else {
+                    weatherLabel(day.weatherCode)
+                }
+                val probabilityText = if (lowConfidence) {
+                    "参考"
+                } else {
+                    day.maxPrecipitationProbability?.let { "$it%" } ?: "--"
+                }
+                val rowModifier = if (lowConfidence) {
+                    Modifier.fillMaxWidth()
+                } else {
+                    Modifier.fillMaxWidth().clickable { onClick(day) }
+                }
+                Row(
+                    rowModifier.padding(horizontal = 15.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(day.date.drop(5).replace("-", "/"), Modifier.width(46.dp), color = RedesignMuted, fontSize = 11.sp)
+                    Text(weatherIcon(day.weatherCode), fontSize = 23.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        label,
+                        Modifier.weight(1f),
+                        color = if (lowConfidence) RedesignMuted else RedesignText,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        probabilityText,
+                        Modifier.width(38.dp),
+                        color = if (lowConfidence) RedesignMuted else RedesignBlue,
+                        fontSize = 10.sp,
+                    )
+                    Text(day.maxTemperatureC.tempText(), color = RedesignRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(" / ", color = RedesignMuted, fontSize = 10.sp)
+                    Text(day.minTemperatureC.tempText(), color = RedesignLow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                if (index != days.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+                }
+            }
+        }
+    }
+}
+
+private fun isWetForecastCode(code: Int?): Boolean = code in listOf(
+    51, 53, 55, 56, 57,
+    61, 63, 65, 66, 67,
+    71, 73, 75, 77, 80, 81, 82, 85, 86,
+    95, 96, 99,
+)
+
+'''
+          text = text[:start] + new_extended + text[end:]
+          home.write_text(text)
+
+          test = Path("app/src/test/java/com/example/weather/data/model/ForecastPresentationPolicyTest.kt")
+          text = test.read_text()
+          marker = '''    private fun snapshot(
+'''
+          extra_tests = '''    @Test
+    fun futureDailyProbabilityUsesRepresentativeHoursInsteadOfSingleSpike() {
+        val now = LocalDateTime.parse("2026-08-07T08:00")
+        val day = DailyWeather("2026-08-08", 2, 33.0, 26.0, 95, precipitationSumMm = 0.2)
+        val hours = (9..20).map { hourOfDay ->
+            val spike = hourOfDay == 15
+            hour(
+                time = "2026-08-08T${hourOfDay.toString().padStart(2, '0')}:00",
+                code = if (spike) 51 else 2,
+                probability = if (spike) 95 else 20,
+                amount = if (spike) 0.2 else 0.0,
+            )
+        }
+        val presentation = snapshot(hourly = hours, daily = listOf(day)).presentationForDay(day, now)
+
+        assertEquals(20, presentation.precipitationProbability)
+        assertEquals(2, presentation.weatherCode)
+        assertTrue(presentation.hasBriefPrecipitation)
+    }
+
+    @Test
+    fun twoShortRainHoursDoNotBecomeAllDayRainJustBecauseTotalExceedsTwoMillimeters() {
+        val now = LocalDateTime.parse("2026-08-07T08:00")
+        val day = DailyWeather("2026-08-08", 63, 33.0, 26.0, 90, precipitationSumMm = 2.4)
+        val hours = (9..20).map { hourOfDay ->
+            val rainy = hourOfDay == 13 || hourOfDay == 14
+            hour(
+                time = "2026-08-08T${hourOfDay.toString().padStart(2, '0')}:00",
+                code = if (rainy) 61 else 2,
+                probability = if (rainy) 90 else 20,
+                amount = if (rainy) 1.2 else 0.0,
+            )
+        }
+        val presentation = snapshot(hourly = hours, daily = listOf(day)).presentationForDay(day, now)
+
+        assertEquals(2, presentation.weatherCode)
+        assertTrue(presentation.hasBriefPrecipitation)
+    }
+
+    private fun snapshot(
+'''
+          if marker not in text:
+              raise SystemExit("test insertion marker not found")
+          text = text.replace(marker, extra_tests, 1)
+          test.write_text(text)
+          PY
+
+          rm -f .github/workflows/apply-long-range-fix-once.yml
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/example/weather/data/model/ForecastPresentationPolicy.kt app/src/main/java/com/example/weather/ui/RedesignedHomeScreen.kt app/src/test/java/com/example/weather/data/model/ForecastPresentationPolicyTest.kt .github/workflows/apply-long-range-fix-once.yml
+          git commit -m "Make long range rain forecast less alarmist"
+          git push origin fix/long-range-rain-20260821
