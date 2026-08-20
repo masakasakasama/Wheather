@@ -13,6 +13,7 @@ import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.enforcePrecipitationConsistency
 import com.example.weather.data.model.identityKey
+import com.example.weather.data.model.isInJapan
 import com.example.weather.data.model.toWeatherLocation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -31,17 +32,48 @@ class OpenMeteoClient(
     private val json: Json,
 ) {
     suspend fun fetchForecast(location: WeatherLocation): WeatherSnapshot = withContext(Dispatchers.IO) {
-        request(location, useJmaModel = false)
-            ?.copy(
+        if (location.isInJapan()) {
+            val bestMatch = request(
+                location = location,
+                modelId = null,
+                forecastDays = 14,
+                includeMinutely15 = true,
+                includePrecipitationProbability = true,
+                includeUv = true,
+            )
+            val jmaPrimary = request(
+                location = location,
+                modelId = "jma_seamless",
+                forecastDays = 11,
+                includeMinutely15 = false,
+                includePrecipitationProbability = false,
+                includeUv = false,
+            )
+
+            when {
+                jmaPrimary != null -> mergeJapanForecast(jmaPrimary, bestMatch).copy(
+                    usedFallbackModel = false,
+                    forecastSource = "JMA Seamless（MSM/GSM）主軸 + Best Match（15分・長期補完）",
+                )
+                bestMatch != null -> bestMatch.copy(
+                    usedFallbackModel = true,
+                    forecastSource = "Open-Meteo Best Match（JMA取得失敗時の予備）",
+                )
+                else -> throw IOException("Open-Meteo forecast request failed")
+            }
+        } else {
+            request(
+                location = location,
+                modelId = null,
+                forecastDays = 14,
+                includeMinutely15 = true,
+                includePrecipitationProbability = true,
+                includeUv = true,
+            )?.copy(
                 usedFallbackModel = false,
                 forecastSource = "Open-Meteo Best Match",
-            )
-            ?: request(location, useJmaModel = true)
-                ?.copy(
-                    usedFallbackModel = true,
-                    forecastSource = "Open-Meteo JMA Seamless（予備）",
-                )
-            ?: throw IOException("Open-Meteo forecast request failed")
+            ) ?: throw IOException("Open-Meteo forecast request failed")
+        }
     }
 
     suspend fun searchLocations(query: String): List<WeatherLocation> = withContext(Dispatchers.IO) {
@@ -104,19 +136,49 @@ class OpenMeteoClient(
             throw failure ?: IOException("Open-Meteo multi-model request failed")
         }
 
-    private fun request(location: WeatherLocation, useJmaModel: Boolean): WeatherSnapshot? {
+    private fun request(
+        location: WeatherLocation,
+        modelId: String?,
+        forecastDays: Int,
+        includeMinutely15: Boolean,
+        includePrecipitationProbability: Boolean,
+        includeUv: Boolean,
+    ): WeatherSnapshot? {
+        val hourlyVariables = buildList {
+            add("temperature_2m")
+            if (includePrecipitationProbability) add("precipitation_probability")
+            add("weather_code")
+            add("precipitation")
+            add("relative_humidity_2m")
+            add("wind_speed_10m")
+            add("wind_direction_10m")
+        }.joinToString(",")
+        val dailyVariables = buildList {
+            add("weather_code")
+            add("temperature_2m_max")
+            add("temperature_2m_min")
+            if (includePrecipitationProbability) add("precipitation_probability_max")
+            add("precipitation_sum")
+            if (includeUv) add("uv_index_max")
+            add("sunrise")
+            add("sunset")
+        }.joinToString(",")
+
         val builder = "https://api.open-meteo.com/v1/forecast".toHttpUrl().newBuilder()
             .addQueryParameter("latitude", location.latitude.toString())
             .addQueryParameter("longitude", location.longitude.toString())
             .addQueryParameter("current", "temperature_2m,apparent_temperature,relative_humidity_2m,weather_code,precipitation,wind_speed_10m,wind_direction_10m,pressure_msl")
-            .addQueryParameter("minutely_15", "temperature_2m,precipitation_probability,weather_code,precipitation")
-            .addQueryParameter("hourly", "temperature_2m,precipitation_probability,weather_code,precipitation,relative_humidity_2m,wind_speed_10m,wind_direction_10m")
-            .addQueryParameter("daily", "weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,precipitation_sum,uv_index_max,sunrise,sunset")
-            .addQueryParameter("forecast_days", "14")
+            .addQueryParameter("hourly", hourlyVariables)
+            .addQueryParameter("daily", dailyVariables)
+            .addQueryParameter("forecast_days", forecastDays.toString())
             .addQueryParameter("past_days", "1")
-            .addQueryParameter("forecast_minutely_15", "16")
             .addQueryParameter("timezone", "auto")
-        if (useJmaModel) builder.addQueryParameter("models", "jma_seamless")
+        if (includeMinutely15) {
+            builder
+                .addQueryParameter("minutely_15", "temperature_2m,precipitation_probability,weather_code,precipitation")
+                .addQueryParameter("forecast_minutely_15", "16")
+        }
+        if (modelId != null) builder.addQueryParameter("models", modelId)
 
         val request = Request.Builder()
             .url(builder.build())
@@ -132,10 +194,87 @@ class OpenMeteoClient(
                     }
                 }
             } catch (_: Exception) {
-                // Retry once; final failure falls back to the cached snapshot in the repository.
+                // Retry once; final failure falls back to the other provider/cached snapshot.
             }
         }
         return null
+    }
+
+    private fun mergeJapanForecast(
+        jma: WeatherSnapshot,
+        bestMatch: WeatherSnapshot?,
+    ): WeatherSnapshot {
+        val fallback = bestMatch ?: return jma
+        val fallbackHourly = fallback.hourly.associateBy { it.time }
+        val jmaHourly = jma.hourly.associateBy { it.time }
+        val mergedHourly = (jmaHourly.keys + fallbackHourly.keys)
+            .sorted()
+            .mapNotNull { time ->
+                val primary = jmaHourly[time]
+                val secondary = fallbackHourly[time]
+                when {
+                    primary != null -> primary.copy(
+                        temperatureC = primary.temperatureC ?: secondary?.temperatureC,
+                        precipitationProbability = primary.precipitationProbability
+                            ?: secondary?.precipitationProbability,
+                        weatherCode = primary.weatherCode ?: secondary?.weatherCode,
+                        precipitationMm = primary.precipitationMm ?: secondary?.precipitationMm,
+                        humidityPercent = primary.humidityPercent ?: secondary?.humidityPercent,
+                        windSpeedKmh = primary.windSpeedKmh ?: secondary?.windSpeedKmh,
+                        windDirectionDeg = primary.windDirectionDeg ?: secondary?.windDirectionDeg,
+                    )
+                    secondary != null -> secondary
+                    else -> null
+                }
+            }
+
+        val fallbackDaily = fallback.daily.associateBy { it.date }
+        val jmaDaily = jma.daily.associateBy { it.date }
+        val mergedDaily = (jmaDaily.keys + fallbackDaily.keys)
+            .sorted()
+            .mapNotNull { date ->
+                val primary = jmaDaily[date]
+                val secondary = fallbackDaily[date]
+                when {
+                    primary != null -> primary.copy(
+                        weatherCode = primary.weatherCode ?: secondary?.weatherCode,
+                        maxTemperatureC = primary.maxTemperatureC ?: secondary?.maxTemperatureC,
+                        minTemperatureC = primary.minTemperatureC ?: secondary?.minTemperatureC,
+                        maxPrecipitationProbability = primary.maxPrecipitationProbability
+                            ?: secondary?.maxPrecipitationProbability,
+                        precipitationSumMm = primary.precipitationSumMm ?: secondary?.precipitationSumMm,
+                        uvIndexMax = primary.uvIndexMax ?: secondary?.uvIndexMax,
+                        sunrise = primary.sunrise ?: secondary?.sunrise,
+                        sunset = primary.sunset ?: secondary?.sunset,
+                    )
+                    secondary != null -> secondary
+                    else -> null
+                }
+            }
+
+        val primaryCurrent = jma.current
+        val secondaryCurrent = fallback.current
+        val mergedCurrent = primaryCurrent.copy(
+            temperatureC = primaryCurrent.temperatureC ?: secondaryCurrent.temperatureC,
+            apparentTemperatureC = primaryCurrent.apparentTemperatureC ?: secondaryCurrent.apparentTemperatureC,
+            humidityPercent = primaryCurrent.humidityPercent ?: secondaryCurrent.humidityPercent,
+            weatherCode = primaryCurrent.weatherCode ?: secondaryCurrent.weatherCode,
+            precipitationMm = primaryCurrent.precipitationMm ?: secondaryCurrent.precipitationMm,
+            windSpeedKmh = primaryCurrent.windSpeedKmh ?: secondaryCurrent.windSpeedKmh,
+            windDirectionDeg = primaryCurrent.windDirectionDeg ?: secondaryCurrent.windDirectionDeg,
+            pressureHpa = primaryCurrent.pressureHpa ?: secondaryCurrent.pressureHpa,
+            time = primaryCurrent.time ?: secondaryCurrent.time,
+            modelTemperatureC = primaryCurrent.modelTemperatureC ?: secondaryCurrent.modelTemperatureC,
+        )
+
+        return jma.copy(
+            current = mergedCurrent,
+            minutely15 = fallback.minutely15.ifEmpty { jma.minutely15 },
+            hourly = mergedHourly,
+            daily = mergedDaily,
+            updatedAtMillis = maxOf(jma.updatedAtMillis, fallback.updatedAtMillis),
+            timezone = jma.timezone.ifBlank { fallback.timezone },
+        ).enforcePrecipitationConsistency()
     }
 
     private fun OpenMeteoResponse.toSnapshot(location: WeatherLocation): WeatherSnapshot {
