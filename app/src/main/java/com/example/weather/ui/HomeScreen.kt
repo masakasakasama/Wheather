@@ -1,18 +1,14 @@
 package com.example.weather.ui
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -31,7 +27,6 @@ import com.example.weather.data.model.DailyWeather
 import com.example.weather.data.model.ExpectedPrecipitation
 import com.example.weather.data.model.HourlyWeather
 import com.example.weather.data.model.NotificationSettings
-import com.example.weather.data.model.PresetLocations
 import com.example.weather.data.model.RadarPrecipitation
 import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
@@ -39,6 +34,9 @@ import com.example.weather.data.model.effectiveMaxProbability
 import com.example.weather.data.model.effectivePrecipitationSum
 import com.example.weather.data.model.intensityLabel
 import com.example.weather.data.model.isRaining
+import com.example.weather.data.model.maxPrecipitationProbabilityFromNow
+import com.example.weather.data.model.nextExpectedPrecipitation
+import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -76,7 +74,6 @@ fun HomeScreen(
     )
 }
 
-/** Compatibility table used by the dedicated hourly screen. */
 @Composable
 fun HourlyForecastTable(
     hours: List<HourlyWeather>,
@@ -84,31 +81,23 @@ fun HourlyForecastTable(
     radarPrecipitation: RadarPrecipitation? = null,
 ) {
     if (hours.isEmpty()) {
-        Text(
-            "時間別予報を取得できません",
-            modifier = Modifier.padding(16.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text("時間別予報を取得できません", modifier = Modifier.padding(16.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
-    LazyRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    LazyRow(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         items(hours, key = { it.time }) { hour ->
-            val observedRain = isCurrentHour(hour.time, timezone) && radarPrecipitation?.isRaining() == true
+            val current = isCurrentHour(hour.time, timezone)
+            val observedRain = current && radarPrecipitation?.isRaining() == true
             Column(
-                Modifier
-                    .width(72.dp)
-                    .padding(vertical = 12.dp),
+                Modifier.width(72.dp).padding(vertical = 12.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(5.dp),
             ) {
                 Text(
-                    if (isCurrentHour(hour.time, timezone)) "今" else formatHourOnly(hour.time),
-                    color = if (isCurrentHour(hour.time, timezone)) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    if (current) "今" else formatHourOnly(hour.time),
+                    color = if (current) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 11.sp,
-                    fontWeight = if (isCurrentHour(hour.time, timezone)) FontWeight.Bold else FontWeight.Normal,
+                    fontWeight = if (current) FontWeight.Bold else FontWeight.Normal,
                 )
                 Text(if (observedRain) "🌧️" else weatherIconCompat(hour.weatherCode), fontSize = 26.sp)
                 Text(hour.temperatureC.temperatureText(), fontSize = 15.sp, fontWeight = FontWeight.Bold)
@@ -118,7 +107,7 @@ fun HourlyForecastTable(
                     fontSize = 11.sp,
                 )
                 Text(
-                    if (observedRain) "${radarRateText(radarPrecipitation?.intensityLowerBoundMmPerHour)}+mm/h" else hour.precipitationMm.mmText(),
+                    if (observedRain) "${radarRateText(radarPrecipitation?.intensityLowerBoundMmPerHour)}+mm/h" else hour.precipitationMm.legacyMmText(),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                 )
@@ -147,7 +136,7 @@ fun WeeklyRow(day: DailyWeather, dayHours: List<HourlyWeather>, onClick: () -> U
             Column(Modifier.weight(1f)) {
                 Text(weatherLabelCompat(day.weatherCode), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "降水 ${day.effectiveMaxProbability(dayHours).percentText()} / ${day.effectivePrecipitationSum(dayHours).mmText()}",
+                    "降水 ${day.effectiveMaxProbability(dayHours).percentText()} / ${day.effectivePrecipitationSum(dayHours).legacyMmText()}",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     fontSize = 10.sp,
                 )
@@ -175,11 +164,8 @@ fun DayDetailDialog(
                     "${weatherIconCompat(day.weatherCode)} ${weatherLabelCompat(day.weatherCode)}  ${day.maxTemperatureC.temperatureText()} / ${day.minTemperatureC.temperatureText()}",
                     fontWeight = FontWeight.SemiBold,
                 )
-                if (dayHours.isEmpty()) {
-                    Text("この日の時間予報を取得できません")
-                } else {
-                    HourlyForecastTable(dayHours, timezone, radarPrecipitation)
-                }
+                if (dayHours.isEmpty()) Text("この日の時間予報を取得できません")
+                else HourlyForecastTable(dayHours, timezone, radarPrecipitation)
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("閉じる") } },
@@ -189,21 +175,14 @@ fun DayDetailDialog(
 fun List<HourlyWeather>.nextHours(count: Int, timezone: String = "Asia/Tokyo"): List<HourlyWeather> {
     val zone = runCatching { ZoneId.of(timezone) }.getOrDefault(ZoneId.of("Asia/Tokyo"))
     val now = LocalDateTime.now(zone).withMinute(0).withSecond(0).withNano(0)
-    return filter { hour ->
-        runCatching { !LocalDateTime.parse(hour.time).isBefore(now) }.getOrDefault(false)
-    }.take(count)
+    return filter { hour -> runCatching { !LocalDateTime.parse(hour.time).isBefore(now) }.getOrDefault(false) }.take(count)
 }
 
 fun List<HourlyWeather>.forDate(date: String): List<HourlyWeather> = filter { hour ->
     runCatching { LocalDateTime.parse(hour.time).toLocalDate().toString() == date }.getOrDefault(false)
 }
 
-data class RainSignal(
-    val label: String,
-    val action: String,
-    val detail: String,
-    val color: Color,
-)
+data class RainSignal(val label: String, val action: String, val detail: String, val color: Color)
 
 fun rainSignal(probability: Int?, precipitationMm: Double?): RainSignal {
     val probabilityValue = probability ?: 0
@@ -225,16 +204,29 @@ fun expectedPrecipitationText(snapshot: WeatherSnapshot, expected: ExpectedPreci
     if (expected.isCurrent) {
         return expected.radarPrecipitation?.let { radar ->
             "現在、${radar.intensityLabel()}（レーダー ${radar.intensityLowerBoundMmPerHour.oneDecimal()}mm/h以上）"
-        } ?: "現在、雨が降っています（直近${expected.periodMinutes}分 ${expected.amountMm.mmText()}）"
+        } ?: "現在、雨が降っています（直近${expected.periodMinutes}分 ${expected.amountMm.legacyMmText()}）"
     }
     val date = expected.time.take(10)
-    val dailyTotal = snapshot.daily
-        .firstOrNull { it.date == date }
-        .effectivePrecipitationSum(snapshot.hourly.forDate(date))
+    val dailyTotal = snapshot.daily.firstOrNull { it.date == date }.effectivePrecipitationSum(snapshot.hourly.forDate(date))
     val period = if (expected.periodMinutes == 60) "その1時間" else "その${expected.periodMinutes}分"
-    val dailyDetail = dailyTotal?.let { " / ${formatDateShort(date)}一日合計 ${it.mmText()}" }.orEmpty()
-    return "${formatDateMinuteLabel(expected.time)}ごろから雨予報（$period ${expected.amountMm.mmText()}$dailyDetail）"
+    val dailyDetail = dailyTotal?.let { " / ${formatDateShort(date)}一日合計 ${it.legacyMmText()}" }.orEmpty()
+    return "${formatDateMinuteLabel(expected.time)}ごろから雨予報（$period ${expected.amountMm.legacyMmText()}$dailyDetail）"
 }
+
+fun nextRainText(snapshot: WeatherSnapshot): String {
+    snapshot.nextExpectedPrecipitation(maxHours = 48)?.let { return expectedPrecipitationText(snapshot, it) }
+    val maxProbability = snapshot.maxPrecipitationProbabilityFromNow(maxHours = 48)
+    val hasAmountData = snapshot.minutely15.any { it.precipitationMm != null } || snapshot.hourly.nextHours(48, snapshot.timezone).any { it.precipitationMm != null }
+    return when {
+        !hasAmountData -> "48時間の雨量データなし${maxProbability?.let { "（確率最大$it%）" }.orEmpty()}"
+        maxProbability != null -> "48時間の予想雨量は0.0mm（確率最大$maxProbability%）"
+        else -> "48時間の雨予報はありません"
+    }
+}
+
+fun formatHourMinute(epochMillis: Long): String = Instant.ofEpochMilli(epochMillis)
+    .atZone(ZoneId.of("Asia/Tokyo"))
+    .format(DateTimeFormatter.ofPattern("HH:mm"))
 
 fun temperatureDifferenceText(current: Double?, previous: Double?): String? {
     if (current == null || previous == null) return null
@@ -246,8 +238,7 @@ fun temperatureRangeText(low: Double?, high: Double?): String? {
     if (low == null || high == null || !low.isFinite() || !high.isFinite() || low >= high) return null
     val lowText = low.roundText()
     val highText = high.roundText()
-    if (lowText == highText) return null
-    return "$lowText〜$highText°"
+    return if (lowText == highText) null else "$lowText〜$highText°"
 }
 
 fun radarRateText(value: Double?): String = when {
@@ -256,9 +247,7 @@ fun radarRateText(value: Double?): String = when {
     else -> value.roundText()
 }
 
-fun formatHourOnly(time: String): String = runCatching {
-    "${LocalDateTime.parse(time).hour}時"
-}.getOrDefault("--")
+fun formatHourOnly(time: String): String = runCatching { "${LocalDateTime.parse(time).hour}時" }.getOrDefault("--")
 
 fun formatDateWithWeekday(date: String): String = runCatching {
     java.time.LocalDate.parse(date).format(DateTimeFormatter.ofPattern("MM/dd(E)", Locale.JAPANESE))
@@ -318,5 +307,5 @@ private fun weatherLabelCompat(code: Int?): String = when (code) {
 fun Double.roundText(): String = "%.0f".format(this)
 fun Double.oneDecimal(): String = "%.1f".format(this)
 fun Int?.percentText(): String = this?.let { "$it%" } ?: "--%"
-fun Double?.mmText(): String = this?.let { "${it.oneDecimal()}mm" } ?: "--mm"
+private fun Double?.legacyMmText(): String = this?.let { "${it.oneDecimal()}mm" } ?: "--mm"
 fun Double?.temperatureText(): String = this?.let { "${it.roundText()}°" } ?: "--°"
