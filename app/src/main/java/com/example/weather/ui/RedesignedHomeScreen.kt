@@ -520,7 +520,7 @@ private fun RedesignTodayTomorrow(snapshot: WeatherSnapshot, onClick: (DailyWeat
                         Text(" / ", color = RedesignMuted)
                         Text(day.minTemperatureC.tempText(), color = RedesignLow, fontWeight = FontWeight.Bold, fontSize = 17.sp)
                     }
-                    Text("💧 ${day.effectiveMaxProbability(dayHours)?.let { "$it%" } ?: "--"}   ☔ ${day.effectivePrecipitationSum(dayHours).mmText()}", color = RedesignBlue, fontSize = 10.sp)
+                    Text("💧 ${day.maxPrecipitationProbability?.let { "$it%" } ?: "--"}   ☔ ${day.effectivePrecipitationSum(dayHours).mmText()}", color = RedesignBlue, fontSize = 10.sp)
                 }
             }
         }
@@ -538,50 +538,70 @@ private fun RedesignExtendedForecast(snapshot: WeatherSnapshot, onClick: (DailyW
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
         Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
-            Text(
-                "この先2週間",
-                Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
-                color = RedesignText,
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-            )
-            days.forEachIndexed { index, day ->
-                val dayHours = snapshot.hourly.filter { it.time.startsWith(day.date) }
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { onClick(day) }
-                        .padding(horizontal = 15.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(day.date.drop(5).replace("-", "/"), Modifier.width(46.dp), color = RedesignMuted, fontSize = 11.sp)
-                    Text(weatherIcon(day.weatherCode), fontSize = 23.sp)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        weatherLabel(day.weatherCode),
-                        Modifier.weight(1f),
-                        color = RedesignText,
-                        fontSize = 11.sp,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        day.effectiveMaxProbability(dayHours)?.let { "$it%" } ?: "--",
-                        Modifier.width(38.dp),
-                        color = RedesignBlue,
-                        fontSize = 10.sp,
-                    )
-                    Text(day.maxTemperatureC.tempText(), color = RedesignRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                    Text(" / ", color = RedesignMuted, fontSize = 10.sp)
-                    Text(day.minTemperatureC.tempText(), color = RedesignLow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                }
-                if (index != days.lastIndex) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
-                }
-            }
+  Row(
+      Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 8.dp),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+      Text("この先2週間", color = RedesignText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+      Text("8日目以降は参考", color = RedesignMuted, fontSize = 9.sp)
+  }
+  days.forEachIndexed { index, day ->
+      val lowConfidence = index >= 6
+      val label = if (lowConfidence && isWetForecastCode(day.weatherCode)) {
+          "雨の可能性"
+      } else {
+          weatherLabel(day.weatherCode)
+      }
+      val probabilityText = if (lowConfidence) {
+          "参考"
+      } else {
+          day.maxPrecipitationProbability?.let { "$it%" } ?: "--"
+      }
+      val rowModifier = if (lowConfidence) {
+          Modifier.fillMaxWidth()
+      } else {
+          Modifier.fillMaxWidth().clickable { onClick(day) }
+      }
+      Row(
+          rowModifier.padding(horizontal = 15.dp, vertical = 10.dp),
+          verticalAlignment = Alignment.CenterVertically,
+      ) {
+          Text(day.date.drop(5).replace("-", "/"), Modifier.width(46.dp), color = RedesignMuted, fontSize = 11.sp)
+          Text(weatherIcon(day.weatherCode), fontSize = 23.sp)
+          Spacer(Modifier.width(8.dp))
+          Text(
+              label,
+              Modifier.weight(1f),
+              color = if (lowConfidence) RedesignMuted else RedesignText,
+              fontSize = 11.sp,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+          )
+          Text(
+              probabilityText,
+              Modifier.width(38.dp),
+              color = if (lowConfidence) RedesignMuted else RedesignBlue,
+              fontSize = 10.sp,
+          )
+          Text(day.maxTemperatureC.tempText(), color = RedesignRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+          Text(" / ", color = RedesignMuted, fontSize = 10.sp)
+          Text(day.minTemperatureC.tempText(), color = RedesignLow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+      }
+      if (index != days.lastIndex) {
+          HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+      }
+  }
         }
     }
 }
+
+private fun isWetForecastCode(code: Int?): Boolean = code in listOf(
+    51, 53, 55, 56, 57,
+    61, 63, 65, 66, 67,
+    71, 73, 75, 77, 80, 81, 82, 85, 86,
+    95, 96, 99,
+)
 
 @Composable
 private fun RedesignMetrics(snapshot: WeatherSnapshot) {
