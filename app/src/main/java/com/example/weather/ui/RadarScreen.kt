@@ -60,10 +60,10 @@ import kotlin.math.asinh
 import kotlin.math.floor
 import kotlin.math.tan
 
-private val RadarBlue = Color(0xFF2F7AF8)
-private val RadarText = Color(0xFF10233A)
-private val RadarMuted = Color(0xFF6C7C8E)
-private val RadarSoftBlue = Color(0xFFEAF3FF)
+private val RadarBlue = Color(0xFF5BA2FF)
+private val RadarText = Color(0xFFF2F7FC)
+private val RadarMuted = Color(0xFF9BAFC2)
+private val RadarSoftBlue = Color(0xFF17283B)
 
 @Composable
 fun RadarScreen(location: WeatherLocation) {
@@ -74,7 +74,7 @@ fun RadarScreen(location: WeatherLocation) {
         ) {
             Text("雨雲レーダー", color = RadarText, fontSize = 24.sp, fontWeight = FontWeight.Bold)
             Card(
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF121A24)),
                 shape = RoundedCornerShape(22.dp),
             ) {
                 Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -130,7 +130,7 @@ fun RadarScreen(location: WeatherLocation) {
             }
             is RadarUiState.Error -> {
                 Card(
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEEEE)),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF3A1E22)),
                     shape = RoundedCornerShape(22.dp),
                 ) {
                     Text(radar.message, Modifier.padding(18.dp), color = MaterialTheme.colorScheme.error)
@@ -177,7 +177,7 @@ fun RadarScreen(location: WeatherLocation) {
 private fun RadarMapCard(radar: RadarUiState.Ready, modifier: Modifier) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121A24)),
         shape = RoundedCornerShape(26.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
     ) {
@@ -188,7 +188,7 @@ private fun RadarMapCard(radar: RadarUiState.Ready, modifier: Modifier) {
                     .align(Alignment.TopStart)
                     .padding(12.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White.copy(alpha = 0.92f))
+                    .background(Color(0xFF101820).copy(alpha = 0.94f))
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -202,7 +202,7 @@ private fun RadarMapCard(radar: RadarUiState.Ready, modifier: Modifier) {
                     .align(Alignment.BottomStart)
                     .padding(12.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(Color.White.copy(alpha = 0.92f))
+                    .background(Color(0xFF101820).copy(alpha = 0.94f))
                     .padding(horizontal = 9.dp, vertical = 6.dp),
                 color = RadarMuted,
                 fontSize = 10.sp,
@@ -220,7 +220,7 @@ fun RadarPreview(location: WeatherLocation, refreshKey: Long, modifier: Modifier
         state = runCatching { loadRadar(location, DEFAULT_RADAR_ZOOM, 0, 0) }
             .getOrElse { RadarUiState.Error("雨雲レーダーを取得できません") }
     }
-    Box(modifier.clip(RoundedCornerShape(20.dp)).background(Color.White), contentAlignment = Alignment.Center) {
+    Box(modifier.clip(RoundedCornerShape(20.dp)).background(Color(0xFF121A24)), contentAlignment = Alignment.Center) {
         when (val radar = state) {
             RadarUiState.Loading -> CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp, color = RadarBlue)
             is RadarUiState.Error -> Text(radar.message, color = RadarMuted, fontSize = 11.sp)
@@ -228,7 +228,7 @@ fun RadarPreview(location: WeatherLocation, refreshKey: Long, modifier: Modifier
                 RadarTileGrid(radar, Modifier.fillMaxSize())
                 Text(
                     "気象庁レーダー ${radar.frame.validTime.toRadarDisplayTime()}",
-                    modifier = Modifier.align(Alignment.BottomStart).background(Color.White.copy(alpha = 0.9f)).padding(7.dp),
+                    modifier = Modifier.align(Alignment.BottomStart).background(Color(0xFF101820).copy(alpha = 0.94f)).padding(7.dp),
                     color = RadarText,
                     fontSize = 10.sp,
                 )
@@ -246,7 +246,7 @@ private fun RadarControls(
     onReset: () -> Unit,
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF121A24)),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
     ) {
@@ -280,7 +280,7 @@ private fun RadarControls(
 
 @Composable
 private fun RadarTileGrid(radar: RadarUiState.Ready, modifier: Modifier) {
-    BoxWithConstraints(modifier.background(Color(0xFFF2F5F7)), contentAlignment = Alignment.Center) {
+    BoxWithConstraints(modifier.background(Color(0xFF0C1219)), contentAlignment = Alignment.Center) {
         val tileSize = maxWidth / 3
         Box(Modifier.size(maxWidth)) {
             radar.tiles.forEach { tile ->
@@ -293,7 +293,7 @@ private fun RadarTileGrid(radar: RadarUiState.Ready, modifier: Modifier) {
                 }
             }
             Box(
-                Modifier.align(Alignment.Center).size(28.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.92f)),
+                Modifier.align(Alignment.Center).size(28.dp).clip(CircleShape).background(Color(0xFF101820).copy(alpha = 0.94f)),
                 contentAlignment = Alignment.Center,
             ) {
                 Box(Modifier.size(12.dp).clip(CircleShape).background(RadarBlue))
