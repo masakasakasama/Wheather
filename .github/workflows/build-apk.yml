@@ -116,3 +116,33 @@ jobs:
               --title "Latest debug APK" \
               --notes "Latest debug APK for direct Android phone install. Open this release on your Android device and download PersonalWeather-debug.apk."
           fi
+
+      - name: Record successful release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cat > release-status.json <<EOF
+          {
+            "sourceSha": "${GITHUB_SHA}",
+            "runId": "${GITHUB_RUN_ID}",
+            "runNumber": ${GITHUB_RUN_NUMBER},
+            "versionCode": ${VERSION_CODE},
+            "versionName": "${VERSION_NAME}",
+            "publishedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          }
+          EOF
+          encoded=$(base64 -w0 release-status.json)
+          api_path="repos/${GITHUB_REPOSITORY}/contents/latest-debug.json"
+          existing_sha=$(gh api "${api_path}?ref=release-status" --jq '.sha' 2>/dev/null || true)
+          if [ -n "$existing_sha" ]; then
+            gh api --method PUT "$api_path" \
+              -f message="Record latest successful APK release" \
+              -f content="$encoded" \
+              -f branch="release-status" \
+              -f sha="$existing_sha" >/dev/null
+          else
+            gh api --method PUT "$api_path" \
+              -f message="Record latest successful APK release" \
+              -f content="$encoded" \
+              -f branch="release-status" >/dev/null
+          fi
