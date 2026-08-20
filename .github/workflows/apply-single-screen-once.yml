@@ -1,0 +1,183 @@
+name: Apply single weather screen once
+
+on:
+  push:
+    branches: ["ux/single-screen-20260821"]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-single-screen:
+    if: "!contains(github.event.head_commit.message, '[single-screen-applied]')"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ux/single-screen-20260821
+          fetch-depth: 0
+
+      - name: Consolidate weather UI into one scrolling screen
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          main = Path("app/src/main/java/com/example/weather/MainActivity.kt")
+          text = main.read_text()
+          pattern = re.compile(r'\) \{\n    var selectedTab.*?\n\n    val updateInfo = state\.updateInfo', re.S)
+          replacement = ''' ) {
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        HomeScreen(
+            state = state,
+            appVersionName = appVersionName,
+            onRefresh = onRefresh,
+            onUseDeviceLocation = onUseDeviceLocation,
+            onSelectLocation = onSelectLocation,
+            onSearchLocations = onSearchLocations,
+            onMoveLocation = onMoveLocation,
+            onDeleteLocation = onDeleteLocation,
+            onUpdateNotificationSettings = onUpdateNotificationSettings,
+            onCheckUpdate = onCheckUpdate,
+            onDismissUpdateCheckMessage = onDismissUpdateCheckMessage,
+            onDismissError = onDismissError,
+        )
+    }
+
+    val updateInfo = state.updateInfo'''
+          text, count = pattern.subn(replacement, text, count=1)
+          if count != 1:
+              raise SystemExit(f"WeatherApp replacement failed: {count}")
+          main.write_text(text)
+
+          home = Path("app/src/main/java/com/example/weather/ui/RedesignedHomeScreen.kt")
+          text = home.read_text()
+
+          old_items = '''            item { RedesignHero(snapshot) }
+            item { RedesignHourly(snapshot) }
+            item { RedesignTodayTomorrow(snapshot) { selectedDay = it } }
+            item { RedesignMetrics(snapshot) }
+            item { RedesignSources(snapshot) }'''
+          new_items = '''            item { RedesignHero(snapshot) }
+            if (snapshot.location.isInJapan()) item { RedesignRadarPreview(snapshot) }
+            item { RedesignHourly(snapshot) }
+            item { RedesignTodayTomorrow(snapshot) { selectedDay = it } }
+            item { RedesignExtendedForecast(snapshot) { selectedDay = it } }
+            item { RedesignMetrics(snapshot) }
+            item { RedesignSources(snapshot) }'''
+          if old_items not in text:
+              raise SystemExit("Home item block not found")
+          text = text.replace(old_items, new_items, 1)
+          text = text.replace('.take(8)', '.take(24)', 1)
+
+          marker = '''@Composable
+private fun RedesignHourly(snapshot: WeatherSnapshot) {'''
+          radar_func = '''@Composable
+private fun RedesignRadarPreview(snapshot: WeatherSnapshot) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = RedesignCard),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text("雨雲レーダー", color = RedesignText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("現在地周辺の実況", color = RedesignMuted, fontSize = 10.sp)
+                }
+                Text("気象庁", color = RedesignBlue, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+            }
+            RadarPreview(
+                location = snapshot.location,
+                refreshKey = snapshot.updatedAtMillis,
+                modifier = Modifier.fillMaxWidth().height(220.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun RedesignHourly(snapshot: WeatherSnapshot) {'''
+          if marker not in text:
+              raise SystemExit("Hourly marker not found")
+          text = text.replace(marker, radar_func, 1)
+
+          metric_marker = '''@Composable
+private fun RedesignMetrics(snapshot: WeatherSnapshot) {'''
+          extended_func = '''@Composable
+private fun RedesignExtendedForecast(snapshot: WeatherSnapshot, onClick: (DailyWeather) -> Unit) {
+    val days = snapshot.forecastDays().drop(2).take(12)
+    if (days.isEmpty()) return
+    Card(
+        colors = CardDefaults.cardColors(containerColor = RedesignCard),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+            Text(
+                "この先2週間",
+                Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
+                color = RedesignText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+            )
+            days.forEachIndexed { index, day ->
+                val dayHours = snapshot.hourly.filter { it.time.startsWith(day.date) }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onClick(day) }
+                        .padding(horizontal = 15.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(day.date.drop(5).replace("-", "/"), Modifier.width(46.dp), color = RedesignMuted, fontSize = 11.sp)
+                    Text(weatherIcon(day.weatherCode), fontSize = 23.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        weatherLabel(day.weatherCode),
+                        Modifier.weight(1f),
+                        color = RedesignText,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        day.effectiveMaxProbability(dayHours)?.let { "$it%" } ?: "--",
+                        Modifier.width(38.dp),
+                        color = RedesignBlue,
+                        fontSize = 10.sp,
+                    )
+                    Text(day.maxTemperatureC.tempText(), color = RedesignRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(" / ", color = RedesignMuted, fontSize = 10.sp)
+                    Text(day.minTemperatureC.tempText(), color = RedesignLow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                if (index != days.lastIndex) HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+            }
+        }
+    }
+}
+
+@Composable
+private fun RedesignMetrics(snapshot: WeatherSnapshot) {'''
+          if metric_marker not in text:
+              raise SystemExit("Metrics marker not found")
+          text = text.replace(metric_marker, extended_func, 1)
+          home.write_text(text)
+          PY
+
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/example/weather/MainActivity.kt app/src/main/java/com/example/weather/ui/RedesignedHomeScreen.kt
+          git commit -m "Consolidate weather UI into one screen [single-screen-applied]"
+          git push origin ux/single-screen-20260821
