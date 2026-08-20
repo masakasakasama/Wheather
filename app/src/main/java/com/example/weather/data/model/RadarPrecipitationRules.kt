@@ -17,7 +17,9 @@ fun radarIntensityLowerBound(
     green: Int,
     blue: Int,
 ): Double? {
-    if (alpha == 0) return 0.0
+    if (alpha == 0) {
+        return if (red == 255 && green == 255 && blue == 255) 0.0 else null
+    }
     return when (Triple(red, green, blue)) {
         Triple(242, 242, 255) -> 0.1
         Triple(160, 210, 255) -> 1.0
@@ -39,12 +41,13 @@ fun radarIntensityLowerBound(
  * max-of-7x7 behaviour where one noisy/edge pixel could turn the whole location rainy.
  *
  * Returns null when too few pixels use a recognised JMA palette colour. Callers must
- * treat that as an observation failure, not as "no rain".
+ * treat that as an observation failure, not as "no rain". Fully transparent black
+ * placeholder pixels are also treated as unknown rather than dry observations.
  */
 fun representativeRadarIntensity(samples: List<RadarPixelSample>): Double? {
     val neighbourhood = samples.filter { abs(it.dx) <= 1 && abs(it.dy) <= 1 }
     val recognized = neighbourhood.filter { it.intensityLowerBoundMmPerHour != null }
-    if (recognized.size < MINIMUM_RECOGNIZED_RADAR_PIXELS) return null
+    if (recognized.size < MinimumRecognizedRadarPixels) return null
 
     val wet = recognized.filter {
         PrecipitationPolicy.isMeasurable(it.intensityLowerBoundMmPerHour)
