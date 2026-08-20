@@ -36,7 +36,7 @@ class JmaRadarClient(
             if (!response.isSuccessful) throw IOException("JMA radar target time request failed")
             val body = response.body?.string().orEmpty()
             val latest = json.decodeFromString(ListSerializer(RadarTargetTime.serializer()), body)
-                .maxByOrNull { it.validtime }
+                .firstOrNull()
                 ?: throw IOException("JMA radar target time is empty")
             RadarFrame(
                 baseTime = latest.basetime,
@@ -62,7 +62,27 @@ class JmaRadarClient(
     suspend fun latestPrecipitation(location: WeatherLocation): RadarPrecipitation? = withContext(Dispatchers.IO) {
         if (!location.isInJapan()) return@withContext null
         val frame = latestFrame()
-        val zoom = 10
+        var representativeIntensity: Double? = null
+        for (zoom in listOf(10, 8, 6)) {
+            val candidate = representativeIntensityAtZoom(frame, location, zoom)
+            if (candidate != null) {
+                representativeIntensity = candidate
+                break
+            }
+        }
+        val intensity = representativeIntensity
+            ?: throw IOException("JMA radar tile coverage was insufficient")
+        RadarPrecipitation(
+            intensityLowerBoundMmPerHour = intensity,
+            observedAtMillis = frame.validTime.toRadarEpochMillis(),
+        )
+    }
+
+    private suspend fun representativeIntensityAtZoom(
+        frame: RadarFrame,
+        location: WeatherLocation,
+        zoom: Int,
+    ): Double? {
         val tileCount = 1 shl zoom
         val xPosition = (location.longitude + 180.0) / 360.0 * tileCount
         val latitudeRadians = location.latitude * PI / 180.0
@@ -75,35 +95,31 @@ class JmaRadarClient(
             .replace("{z}", zoom.toString())
             .replace("{x}", tileX.toString())
             .replace("{y}", tileY.toString())
-        val bitmap = fetchBitmap(radarUrl) ?: throw IOException("JMA radar tile request failed")
+        val bitmap = fetchBitmap(radarUrl) ?: return null
 
-        val samples = mutableListOf<RadarPixelSample>()
-        val radius = 1
-        for (dy in -radius..radius) {
-            for (dx in -radius..radius) {
-                val x = pixelX + dx
-                val y = pixelY + dy
-                if (x !in 0 until bitmap.width || y !in 0 until bitmap.height) continue
-                val color = bitmap.getPixel(x, y)
-                samples += RadarPixelSample(
-                    dx = dx,
-                    dy = dy,
-                    intensityLowerBoundMmPerHour = radarIntensityLowerBound(
-                        alpha = color ushr 24 and 0xFF,
-                        red = color ushr 16 and 0xFF,
-                        green = color ushr 8 and 0xFF,
-                        blue = color and 0xFF,
-                    ),
-                )
+        return try {
+            val samples = mutableListOf<RadarPixelSample>()
+            for (dy in -1..1) {
+                for (dx in -1..1) {
+                    val x = pixelX + dx
+                    val y = pixelY + dy
+                    if (x !in 0 until bitmap.width || y !in 0 until bitmap.height) continue
+                    val color = bitmap.getPixel(x, y)
+                    samples += RadarPixelSample(
+                        dx = dx,
+                        dy = dy,
+                        intensityLowerBoundMmPerHour = radarIntensityLowerBound(
+                            alpha = color ushr 24 and 0xFF,
+                            red = color ushr 16 and 0xFF,
+                            green = color ushr 8 and 0xFF,
+                            blue = color and 0xFF,
+                        ),
+                    )
+                }
             }
+            representativeRadarIntensity(samples)
+        } finally {
+            bitmap.recycle()
         }
-        bitmap.recycle()
-
-        val representativeIntensity = representativeRadarIntensity(samples)
-            ?: throw IOException("JMA radar tile color coverage was insufficient")
-        RadarPrecipitation(
-            intensityLowerBoundMmPerHour = representativeIntensity,
-            observedAtMillis = frame.validTime.toRadarEpochMillis(),
-        )
     }
 }
