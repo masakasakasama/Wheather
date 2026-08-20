@@ -56,6 +56,28 @@ class ForecastPresentationPolicyTest {
     }
 
     @Test
+    fun twoBriefRainHoursInMostlyDryDayStaySecondary() {
+        val now = LocalDateTime.parse("2026-08-07T08:00")
+        val day = DailyWeather("2026-08-08", 63, 33.0, 26.0, 80, precipitationSumMm = 0.6)
+        val hours = (9..20).map { hourOfDay ->
+            val rainy = hourOfDay == 13 || hourOfDay == 14
+            hour(
+                time = "2026-08-08T${hourOfDay.toString().padStart(2, '0')}:00",
+                code = if (rainy) 61 else 2,
+                probability = if (rainy) 80 else 20,
+                amount = if (rainy) 0.3 else 0.0,
+            )
+        }
+        val snapshot = snapshot(hourly = hours, daily = listOf(day))
+
+        val presentation = snapshot.presentationForDay(day, now)
+
+        assertEquals(2, presentation.weatherCode)
+        assertTrue(presentation.hasBriefPrecipitation)
+        assertTrue(presentation.weatherLabel.contains("一時雨"))
+    }
+
+    @Test
     fun sustainedRainRemainsProminent() {
         val now = LocalDateTime.parse("2026-08-07T08:00")
         val day = DailyWeather("2026-08-08", 63, 30.0, 24.0, 70, precipitationSumMm = 2.0)

@@ -1,6 +1,7 @@
 package com.example.weather.data.repository
 
 import android.content.Context
+import android.util.Log
 import androidx.glance.appwidget.updateAll
 import com.example.weather.data.api.AirQualityClient
 import com.example.weather.data.api.JmaAmedasClient
@@ -12,6 +13,7 @@ import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.applyConsumerForecastProjection
 import com.example.weather.data.model.canonicalizedSavedLocations
+import com.example.weather.data.model.decisionDiagnostics
 import com.example.weather.data.model.enforcePrecipitationConsistency
 import com.example.weather.data.model.identityKey
 import com.example.weather.data.model.isDeviceLocation
@@ -90,6 +92,7 @@ class WeatherRepository(
             val snapshot = result.snapshot
                 .enforcePrecipitationConsistency()
                 .applyConsumerForecastProjection()
+            Log.d(DIAGNOSTIC_TAG, snapshot.decisionDiagnostics())
             val selectedLocation = cache.readLocationOnce()
             check(location.sameForecastPlaceAs(selectedLocation)) {
                 "Selected location changed while weather was loading"
@@ -161,5 +164,9 @@ class WeatherRepository(
     private suspend fun updateWidgets() {
         WeatherWidget().updateAll(context)
         WeatherSquareWidget().updateAll(context)
+    }
+
+    private companion object {
+        const val DIAGNOSTIC_TAG = "WeatherDecision"
     }
 }
