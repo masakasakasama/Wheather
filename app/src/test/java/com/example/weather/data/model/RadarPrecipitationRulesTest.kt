@@ -24,6 +24,35 @@ class RadarPrecipitationRulesTest {
     }
 
     @Test
+    fun oneWeakRadarPixelDoesNotTurnLocationRainy() {
+        val samples = neighborhood(center = 0.1)
+
+        assertEquals(0.0, representativeRadarIntensity(samples))
+    }
+
+    @Test
+    fun strongCenterEchoRequiresAdjacentAgreementAndUsesRepresentativeIntensity() {
+        val samples = neighborhood(center = 5.0).map {
+            if (it.dx == 1 && it.dy == 0) it.copy(intensityLowerBoundMmPerHour = 5.0) else it
+        }
+
+        assertEquals(5.0, representativeRadarIntensity(samples))
+    }
+
+    @Test
+    fun tooManyUnknownRadarPixelsAreObservationFailureNotDryWeather() {
+        val samples = listOf(
+            RadarPixelSample(0, 0, 0.0),
+            RadarPixelSample(1, 0, 0.0),
+            RadarPixelSample(-1, 0, null),
+            RadarPixelSample(0, 1, null),
+            RadarPixelSample(0, -1, null),
+        )
+
+        assertNull(representativeRadarIntensity(samples))
+    }
+
+    @Test
     fun freshHeavyRadarOverridesSunnyModelCurrentWeather() {
         val observedAt = 1_000_000L
         val snapshot = snapshot(RadarPrecipitation(80.0, observedAt))
@@ -31,7 +60,24 @@ class RadarPrecipitationRulesTest {
         assertEquals(65, snapshot.effectiveCurrentWeatherCode(observedAt + 60_000))
         assertEquals("猛烈な雨", snapshot.effectiveCurrentWeatherLabel(observedAt + 60_000))
         assertEquals(
-            "レーダー観測 猛烈な雨 80mm/h以上",
+            "現在降雨: 気象庁レーダー 猛烈な雨 80mm/h以上",
+            snapshot.radarObservationStatus(observedAt + 60_000),
+        )
+    }
+
+    @Test
+    fun freshDryRadarSuppressesRainyModelCurrentCondition() {
+        val observedAt = 1_000_000L
+        val snapshot = snapshot(
+            radar = RadarPrecipitation(0.0, observedAt),
+            currentCode = 61,
+            currentPrecipitationMm = 0.2,
+        )
+
+        assertEquals(3, snapshot.effectiveCurrentWeatherCode(observedAt + 60_000))
+        assertEquals("くもり", snapshot.effectiveCurrentWeatherLabel(observedAt + 60_000))
+        assertEquals(
+            "現在降雨: 気象庁レーダー 降雨なし",
             snapshot.radarObservationStatus(observedAt + 60_000),
         )
     }
@@ -42,7 +88,7 @@ class RadarPrecipitationRulesTest {
 
         assertEquals(0, snapshot.effectiveCurrentWeatherCode())
         assertEquals("快晴", snapshot.effectiveCurrentWeatherLabel())
-        assertEquals("レーダー取得失敗・予報値を表示", snapshot.radarObservationStatus())
+        assertEquals("現在降雨: レーダー取得失敗・モデル予報を表示", snapshot.radarObservationStatus())
     }
 
     @Test
@@ -51,7 +97,7 @@ class RadarPrecipitationRulesTest {
             location = WeatherLocation("シドニー", -33.86785, 151.20732, countryCode = "AU"),
         )
 
-        assertEquals("レーダー対象外・予報値を表示", snapshot.radarObservationStatus())
+        assertEquals("現在降雨: レーダー対象外・モデル予報を表示", snapshot.radarObservationStatus())
     }
 
     @Test
@@ -61,14 +107,37 @@ class RadarPrecipitationRulesTest {
 
         assertEquals(0, snapshot.effectiveCurrentWeatherCode(observedAt + 16 * 60_000))
         assertEquals(
-            "レーダー観測が古いため予報値を表示",
+            "現在降雨: レーダー観測が古い・モデル予報を表示",
             snapshot.radarObservationStatus(observedAt + 16 * 60_000),
         )
     }
 
-    private fun snapshot(radar: RadarPrecipitation?) = WeatherSnapshot(
+    private fun neighborhood(center: Double): List<RadarPixelSample> = buildList {
+        for (dy in -1..1) {
+            for (dx in -1..1) {
+                add(
+                    RadarPixelSample(
+                        dx = dx,
+                        dy = dy,
+                        intensityLowerBoundMmPerHour = if (dx == 0 && dy == 0) center else 0.0,
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun snapshot(
+        radar: RadarPrecipitation?,
+        currentCode: Int = 0,
+        currentPrecipitationMm: Double = 0.0,
+    ) = WeatherSnapshot(
         location = WeatherLocation("現在地", 35.71, 139.78),
-        current = CurrentWeather(30.0, weatherCode = 0, precipitationMm = 0.0, time = "2026-07-30T18:30"),
+        current = CurrentWeather(
+            30.0,
+            weatherCode = currentCode,
+            precipitationMm = currentPrecipitationMm,
+            time = "2026-07-30T18:30",
+        ),
         hourly = emptyList(),
         daily = emptyList(),
         updatedAtMillis = 0L,
