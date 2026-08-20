@@ -150,17 +150,23 @@ private fun representativeCondition(
 
     val wetHours = codedHours.filter { conditionFamily(it.weatherCode) in WetFamilies }
     val dryHours = codedHours.filterNot { conditionFamily(it.weatherCode) in WetFamilies }
+    val measurableWetHours = wetHours.filter {
+        PrecipitationPolicy.isMeasurable(it.precipitationMm)
+    }
     val maxProbability = hours.mapNotNull { it.precipitationProbability }.maxOrNull() ?: 0
     val totalAmount = hours.mapNotNull { PrecipitationPolicy.normalizeAmount(it.precipitationMm) }.sum()
     val hasThunder = wetHours.any { conditionFamily(it.weatherCode) == ConditionFamily.THUNDERSTORM }
+    val wetShare = measurableWetHours.size.toDouble() / codedHours.size.coerceAtLeast(1)
 
-    // One isolated drizzle/shower hour should not turn the whole daily card rainy.
-    // Sustained precipitation, meaningful accumulation, high PoP, and any thunder
-    // remain prominent. This is closer to day-summary behavior in consumer apps.
+    // A daily card should describe the dominant experience, not the worst single hour.
+    // Brief light rain stays secondary (for example "くもり、一時雨"). Rain becomes
+    // the primary condition only when it is sustained, materially accumulates, covers
+    // a large share of the remaining day, or includes thunder.
     val significantWet = hasThunder ||
-        wetHours.size >= 2 ||
-        totalAmount >= 0.5 ||
-        (wetHours.isNotEmpty() && maxProbability >= 60)
+        totalAmount >= 2.0 ||
+        wetShare >= 0.40 ||
+        (measurableWetHours.size >= 3 && wetShare >= 0.25) ||
+        (measurableWetHours.size >= 2 && maxProbability >= 70 && totalAmount >= 0.5)
 
     val selectedFamily = when {
         significantWet -> selectFamily(wetHours)
