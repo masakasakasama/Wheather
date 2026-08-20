@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -29,7 +28,6 @@ import androidx.compose.material.icons.outlined.MyLocation
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -79,7 +77,6 @@ import com.example.weather.data.model.isInJapan
 import com.example.weather.data.model.isRaining
 import com.example.weather.data.model.nextExpectedPrecipitation
 import com.example.weather.data.model.sameSavedPlaceAs
-import com.example.weather.data.model.today
 import com.example.weather.data.model.weatherIcon
 import com.example.weather.data.model.weatherLabel
 import java.time.Instant
@@ -182,8 +179,10 @@ fun RedesignedHomeScreen(
                 }
 
             item { RedesignHero(snapshot) }
+            if (snapshot.location.isInJapan()) item { RedesignRadarPreview(snapshot) }
             item { RedesignHourly(snapshot) }
             item { RedesignTodayTomorrow(snapshot) { selectedDay = it } }
+            item { RedesignExtendedForecast(snapshot) { selectedDay = it } }
             item { RedesignMetrics(snapshot) }
             item { RedesignSources(snapshot) }
         }
@@ -412,6 +411,34 @@ private fun StatusCard(background: Color, icon: String, iconColor: Color, title:
 }
 
 @Composable
+private fun RedesignRadarPreview(snapshot: WeatherSnapshot) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = RedesignCard),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text("雨雲レーダー", color = RedesignText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("現在地周辺の実況", color = RedesignMuted, fontSize = 10.sp)
+                }
+                Text("気象庁", color = RedesignBlue, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+            }
+            RadarPreview(
+                location = snapshot.location,
+                refreshKey = snapshot.updatedAtMillis,
+                modifier = Modifier.fillMaxWidth().height(220.dp),
+            )
+        }
+    }
+}
+
+@Composable
 private fun RedesignHourly(snapshot: WeatherSnapshot) {
     val hours = snapshot.hourly
         .filter { hour ->
@@ -419,7 +446,7 @@ private fun RedesignHourly(snapshot: WeatherSnapshot) {
                 !LocalDateTime.parse(hour.time).isBefore(LocalDateTime.now(snapshot.forecastZoneId()).withMinute(0).withSecond(0).withNano(0))
             }.getOrDefault(false)
         }
-        .take(8)
+        .take(24)
     Card(
         colors = CardDefaults.cardColors(containerColor = RedesignCard),
         shape = RoundedCornerShape(22.dp),
@@ -498,6 +525,61 @@ private fun RedesignTodayTomorrow(snapshot: WeatherSnapshot, onClick: (DailyWeat
             }
         }
         if (days.size == 1) Spacer(Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun RedesignExtendedForecast(snapshot: WeatherSnapshot, onClick: (DailyWeather) -> Unit) {
+    val days = snapshot.forecastDays().drop(2).take(12)
+    if (days.isEmpty()) return
+    Card(
+        colors = CardDefaults.cardColors(containerColor = RedesignCard),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+            Text(
+                "この先2週間",
+                Modifier.padding(horizontal = 15.dp, vertical = 8.dp),
+                color = RedesignText,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+            )
+            days.forEachIndexed { index, day ->
+                val dayHours = snapshot.hourly.filter { it.time.startsWith(day.date) }
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable { onClick(day) }
+                        .padding(horizontal = 15.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(day.date.drop(5).replace("-", "/"), Modifier.width(46.dp), color = RedesignMuted, fontSize = 11.sp)
+                    Text(weatherIcon(day.weatherCode), fontSize = 23.sp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        weatherLabel(day.weatherCode),
+                        Modifier.weight(1f),
+                        color = RedesignText,
+                        fontSize = 11.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        day.effectiveMaxProbability(dayHours)?.let { "$it%" } ?: "--",
+                        Modifier.width(38.dp),
+                        color = RedesignBlue,
+                        fontSize = 10.sp,
+                    )
+                    Text(day.maxTemperatureC.tempText(), color = RedesignRed, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    Text(" / ", color = RedesignMuted, fontSize = 10.sp)
+                    Text(day.minTemperatureC.tempText(), color = RedesignLow, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+                if (index != days.lastIndex) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+                }
+            }
+        }
     }
 }
 

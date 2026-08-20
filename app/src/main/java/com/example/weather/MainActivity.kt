@@ -11,35 +11,19 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CalendarMonth
-import androidx.compose.material.icons.outlined.Grain
-import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -54,21 +38,15 @@ import com.example.weather.data.model.WeatherLocation
 import com.example.weather.data.model.WeatherSnapshot
 import com.example.weather.data.model.sameForecastPlaceAs
 import com.example.weather.location.LocationProvider
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
 import com.example.weather.ui.HomeScreen
-import com.example.weather.ui.HourlyScreen
-import com.example.weather.ui.RadarScreen
-import com.example.weather.ui.WeatherPalette
 import com.example.weather.ui.WeatherTheme
-import com.example.weather.ui.WeeklyScreen
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -487,69 +465,26 @@ private fun WeatherApp(
     onDismissUpdate: () -> Unit,
     onDismissError: () -> Unit,
 ) {
-    var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("ホーム", "雨雲", "時間", "週間")
-    val icons: List<ImageVector> = listOf(
-        Icons.Outlined.WbSunny,
-        Icons.Outlined.Grain,
-        Icons.Outlined.Schedule,
-        Icons.Outlined.CalendarMonth,
-    )
-
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.background,
-        bottomBar = {
-            NavigationBar(
-                containerColor = WeatherPalette.Header,
-                tonalElevation = 0.dp,
-            ) {
-                tabs.forEachIndexed { index, label ->
-                    NavigationBarItem(
-                        selected = selectedTab == index,
-                        onClick = { selectedTab = index },
-                        icon = { Icon(icons[index], contentDescription = label) },
-                        label = { Text(label) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = MaterialTheme.colorScheme.primary,
-                            selectedTextColor = MaterialTheme.colorScheme.primary,
-                            indicatorColor = Color.Transparent,
-                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        ),
-                    )
-                }
-            }
-        },
-    ) { padding ->
-        Surface(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(MaterialTheme.colorScheme.background)
-                .padding(padding),
-            color = MaterialTheme.colorScheme.background,
-        ) {
-            Column(Modifier.fillMaxSize()) {
-                when (selectedTab) {
-                    0 -> HomeScreen(
-                        state = state,
-                        appVersionName = appVersionName,
-                        onRefresh = onRefresh,
-                        onUseDeviceLocation = onUseDeviceLocation,
-                        onSelectLocation = onSelectLocation,
-                        onSearchLocations = onSearchLocations,
-                        onMoveLocation = onMoveLocation,
-                        onDeleteLocation = onDeleteLocation,
-                        onUpdateNotificationSettings = onUpdateNotificationSettings,
-                        onCheckUpdate = onCheckUpdate,
-                        onDismissUpdateCheckMessage = onDismissUpdateCheckMessage,
-                        onDismissError = onDismissError,
-                    )
-                    1 -> RadarScreen(state.selectedLocation)
-                    2 -> HourlyScreen(state.snapshot)
-                    3 -> WeeklyScreen(state.snapshot)
-                }
-            }
-        }
+    Surface(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        HomeScreen(
+            state = state,
+            appVersionName = appVersionName,
+            onRefresh = onRefresh,
+            onUseDeviceLocation = onUseDeviceLocation,
+            onSelectLocation = onSelectLocation,
+            onSearchLocations = onSearchLocations,
+            onMoveLocation = onMoveLocation,
+            onDeleteLocation = onDeleteLocation,
+            onUpdateNotificationSettings = onUpdateNotificationSettings,
+            onCheckUpdate = onCheckUpdate,
+            onDismissUpdateCheckMessage = onDismissUpdateCheckMessage,
+            onDismissError = onDismissError,
+        )
     }
 
     val updateInfo = state.updateInfo
