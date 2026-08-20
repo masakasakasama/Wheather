@@ -24,6 +24,11 @@ class RadarPrecipitationRulesTest {
     }
 
     @Test
+    fun transparentBlackPlaceholderIsNotTreatedAsObservedDryWeather() {
+        assertNull(radarIntensityLowerBound(0, 0, 0, 0))
+    }
+
+    @Test
     fun oneWeakRadarPixelDoesNotTurnLocationRainy() {
         val samples = neighborhood(center = 0.1)
 
