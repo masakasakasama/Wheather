@@ -166,7 +166,7 @@ private fun representativeCondition(
         totalAmount >= 2.0 ||
         wetShare >= 0.40 ||
         (measurableWetHours.size >= 3 && wetShare >= 0.25) ||
-        (measurableWetHours.size >= 2 && maxProbability >= 70 && totalAmount >= 0.5)
+        (measurableWetHours.size >= 2 && wetShare >= 0.25 && maxProbability >= 70 && totalAmount >= 0.5)
 
     val selectedFamily = when {
         significantWet -> selectFamily(wetHours)
